@@ -1,0 +1,13 @@
+[package]
+name = "pulse"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "A Cauldron plugin to dump GGRTTI types."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cauldron.workspace = true
+log.workspace = true

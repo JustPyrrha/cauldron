@@ -1,0 +1,18 @@
+[package]
+name = "cauldron"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "A decima engine plugin loader."
+
+[lib]
+crate-type = [ "cdylib", "lib" ]
+
+[dependencies]
+libloading.workspace = true
+libc.workspace = true
+log.workspace = true
+once_cell.workspace = true
+semver.workspace = true
+simplelog = { workspace = true, features = ["paris"] }
+windows-sys = { workspace = true, features = ["Win32_System_Console"] }
