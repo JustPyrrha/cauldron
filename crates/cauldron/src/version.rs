@@ -1,4 +1,3 @@
-
 /// A Decima game's version.
 pub type GameVersion = (u32, u32, u32, u32);
 
@@ -10,7 +9,7 @@ pub enum RuntimeVersion {
     /// Can only run on the provided game version.
     Strictly(GameVersion),
     /// Can run on any game version from the provided and up.
-    AtLeast(GameVersion)
+    AtLeast(GameVersion),
 }
 
 /// A plugin's game compatibility.

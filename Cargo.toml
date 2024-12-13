@@ -15,6 +15,7 @@ authors = ["Pyrrha Wills <pyrrha.social@gmail.com>"]
 [workspace.dependencies]
 cauldron = { version = "0.1.0", path = "crates/cauldron" }
 
+faithe = "0.8.0"
 libc = "0.2.168"
 libloading = "0.8.6"
 log = "0.4.22"

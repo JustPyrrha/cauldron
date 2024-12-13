@@ -1,11 +1,12 @@
+use crate::{CauldronEnv, Plugin, PluginMainReason};
+use log::{debug, error, info, warn};
+use once_cell::sync::OnceCell;
 use std::env::current_dir;
-use std::path::PathBuf;
 use std::fs;
 use std::fs::File;
-use log::{debug, info, warn};
-use once_cell::sync::OnceCell;
+use std::path::PathBuf;
+use libloading::{Error, Library};
 use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
-use crate::Plugin;
 
 pub(crate) fn plugin_paths(game_dir: &PathBuf) -> &Vec<PathBuf> {
     static PATHS: OnceCell<Vec<PathBuf>> = OnceCell::new();
@@ -17,7 +18,13 @@ pub(crate) fn plugin_paths(game_dir: &PathBuf) -> &Vec<PathBuf> {
             let mut out = Vec::new();
             for path in paths {
                 let path = path.unwrap().path();
-                if path.file_name().unwrap().to_str().unwrap().ends_with(".dll") {
+                if path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .ends_with(".dll")
+                {
                     out.push(path);
                 }
             }
@@ -30,20 +37,38 @@ pub(crate) fn plugin_paths(game_dir: &PathBuf) -> &Vec<PathBuf> {
     })
 }
 
-pub(crate) fn plugins(plugin_paths: &Vec<PathBuf>) -> &Vec<Box<dyn Plugin + Send + Sync + 'static>> {
+pub(crate) fn plugins(
+    plugin_paths: &Vec<PathBuf>,
+    env: CauldronEnv,
+) -> &Vec<Box<dyn Plugin + Send + Sync + 'static>> {
     static PLUGINS: OnceCell<Vec<Box<dyn Plugin + Send + Sync + 'static>>> = OnceCell::new();
     &PLUGINS.get_or_init(|| unsafe {
         let mut plugins: Vec<Box<dyn Plugin + Send + Sync + 'static>> = Vec::new();
         for path in plugin_paths {
-            let lib = libloading::Library::new(path).unwrap();
-            let maybe_plugin_func = lib.get::<unsafe extern "C" fn() -> Box<dyn Plugin + Send + Sync + 'static>>(b"__cauldron_api__plugin");
-            match maybe_plugin_func {
-                Ok(plugin_func) => {
-                    plugins.push(plugin_func());
+            match libloading::Library::new(path) {
+                Ok(lib) => {
+                    let maybe_plugin_func = lib.get::<unsafe extern "C" fn() -> Box<
+                        dyn Plugin + Send + Sync + 'static,
+                    >>(b"__cauldron_api__plugin");
+
+                    match maybe_plugin_func {
+                        Ok(plugin_func) => {
+                            let plugin_main_func = lib
+                                .get::<unsafe extern "C" fn(CauldronEnv, PluginMainReason) -> ()>(
+                                    b"__cauldron_api__main",
+                                )
+                                .expect("malformed plugin missing main export.");
+                            plugin_main_func(env.clone(), PluginMainReason::Load);
+                            plugins.push(plugin_func());
+                        }
+                        Err(_) => {
+                            warn!("cauldron: {:?} is not a cauldron plugin, unloading.", path);
+                            lib.close().unwrap();
+                        }
+                    }
                 }
-                Err(_) => {
-                    warn!("cauldron: {:?} is not a cauldron plugin, unloading.", path);
-                    lib.close().unwrap();
+                Err(e) => {
+                    error!("libloading error: {:?}", e);
                 }
             }
         }
@@ -59,7 +84,7 @@ pub(crate) fn on_dll_attach() {
         AllocConsole();
         AttachConsole(ATTACH_PARENT_PROCESS);
     }
-    // todo: move level config to an actual config file
+
     simplelog::CombinedLogger::init(vec![
         simplelog::TermLogger::new(
             log::LevelFilter::Trace,
@@ -72,14 +97,15 @@ pub(crate) fn on_dll_attach() {
             simplelog::Config::default(),
             File::create("cauldron.log").unwrap(),
         ),
-    ]).unwrap();
+    ])
+    .unwrap();
 
     info!("Starting Cauldron v{}...", env!("CARGO_PKG_VERSION"));
     // load plugins
     let game_dir = current_dir().unwrap();
     debug!("{:?}", game_dir);
     let plugin_paths = plugin_paths(&game_dir);
-    let plugins = plugins(&plugin_paths);
+    let plugins = plugins(&plugin_paths, CauldronEnv::new());
 
     info!("Loading {} plugins...", plugins.len());
 

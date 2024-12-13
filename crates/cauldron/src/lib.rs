@@ -1,32 +1,37 @@
+#![feature(fn_traits)]
 #![doc = include_str!("../README.md")]
 #![allow(clippy::missing_safety_doc)]
+
+mod loader;
 pub mod prelude;
 pub mod version;
-mod loader;
 
-use semver::{Version, VersionReq};
 use crate::loader::on_dll_attach;
 use crate::version::{GameType, RuntimeVersion};
+use semver::{Version, VersionReq};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct PluginDependency {
     /// The ID of the plugin to depend on.
     pub id: String,
     /// The version requirements of the dependency.
-    pub versions: VersionReq
+    pub versions: VersionReq,
 }
 
 impl PluginDependency {
     /// Creates a new plugin dependency spec.
     pub fn new(id: impl Into<String>, versions: VersionReq) -> Self {
-        Self { id: id.into(), versions }
+        Self {
+            id: id.into(),
+            versions,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct PluginMeta {
     // todo: theres a lot of plugin meta and it gets kinda messy, maybe replace with a toml file?
-
     /// The plugin's ID.
     /// MUST match ^[a-z][a-z0-9-_]{1,63}$
     pub id: String,
@@ -38,7 +43,7 @@ pub struct PluginMeta {
     pub game: GameType,
 
     /// Extra meta that isn't required.
-    pub optional: OptionalPluginMeta
+    pub optional: OptionalPluginMeta,
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +61,7 @@ pub struct OptionalPluginMeta {
     pub description: String,
 
     /// The plugin's dependencies on other plugins.
-    pub dependencies: Vec<PluginDependency>
+    pub dependencies: Vec<PluginDependency>,
 }
 
 impl Default for OptionalPluginMeta {
@@ -72,10 +77,55 @@ impl Default for OptionalPluginMeta {
 }
 
 pub trait Plugin {
-    fn meta() -> PluginMeta where Self: Sized;
+    fn meta(self) -> PluginMeta;
 
     /// Run as soon as the load order has been finalized.
     fn early_init(&self) {}
+}
+
+#[derive(Debug, Clone)]
+pub struct CauldronEnv {}
+
+impl CauldronEnv {
+    #[doc(hidden)]
+    pub fn new() -> Self {
+        CauldronEnv {}
+    }
+}
+
+unsafe impl Sync for CauldronEnv {}
+unsafe impl Send for CauldronEnv {}
+
+pub trait PluginOps: Plugin {
+    fn env() -> &'static CauldronEnv;
+
+    #[doc(hidden)]
+    fn env_lock() -> &'static OnceLock<Box<CauldronEnv>>;
+    #[doc(hidden)]
+    fn init(env: CauldronEnv);
+}
+
+impl<P> PluginOps for P
+where
+    P: Plugin,
+{
+    fn env() -> &'static CauldronEnv {
+        Self::env_lock().get().unwrap()
+    }
+
+    fn env_lock() -> &'static OnceLock<Box<CauldronEnv>> {
+        static ENV: OnceLock<Box<CauldronEnv>> = OnceLock::new();
+        &ENV
+    }
+
+    fn init(env: CauldronEnv) {
+        Self::env_lock().set(Box::new(env)).unwrap();
+    }
+}
+
+pub enum PluginMainReason {
+    Load,
+    Unload,
 }
 
 #[macro_export]
@@ -86,8 +136,22 @@ macro_rules! define_plugin {
             use super::*;
 
             #[no_mangle]
-            unsafe extern "C" fn __cauldron_api__plugin() -> Box<dyn $crate::Plugin + Send + Sync + 'static> {
+            unsafe extern "C" fn __cauldron_api__plugin(
+            ) -> Box<dyn $crate::Plugin + Send + Sync + 'static> {
                 Box::<$t>::new($f)
+            }
+
+            #[no_mangle]
+            unsafe extern "C" fn __cauldron_api__main(
+                env: $crate::CauldronEnv,
+                reason: $crate::PluginMainReason,
+            ) -> () {
+                match reason {
+                    $crate::PluginMainReason::Load => {
+                        <$t as $crate::PluginOps>::init(env);
+                    }
+                    _ => {}
+                }
             }
         }
     };
@@ -95,11 +159,11 @@ macro_rules! define_plugin {
 
 #[no_mangle]
 unsafe extern "system" fn DllMain(_: isize, reason: u32, _: usize) -> bool {
-    if reason == 1u32 /*DLL_PROCESS_ATTACH*/ {
+    if reason == 1u32
+    /*DLL_PROCESS_ATTACH*/
+    {
         // todo: check if we need to spawn a thread for this
         on_dll_attach();
     }
     true
 }
-
-
