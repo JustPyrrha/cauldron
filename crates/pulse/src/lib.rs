@@ -1,26 +1,26 @@
 #![feature(decl_macro)]
 
+mod memory;
 mod types;
 
-use crate::types::{as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name, RTTIKind, RTTI};
+use crate::memory::{get_data_section, get_rdata_section};
+use crate::types::{
+    as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name,
+    RTTIKind, RTTI,
+};
 use cauldron::prelude::*;
 use cauldron::version::GameType;
-use cauldron::{define_plugin, Plugin, PluginMeta};
-use libc::uintptr_t;
-use pelite::pattern::{parse, save_len};
-use pelite::pe64::Pe;
-use pelite::pe64::PeView;
-use pelite::ImageMap;
-use std::env::current_exe;
-use std::fs::File;
-use std::mem::transmute;
-use std::{cmp, slice};
+use cauldron::{define_plugin, info, Plugin, PluginMeta};
+use pattern16::Pat16_scan;
 use std::ffi::{c_void, CStr};
+use std::fs::File;
+use std::io::Write;
+use std::slice;
 
 pub struct PulsePlugin;
 
 impl Plugin for PulsePlugin {
-    fn meta(self) -> PluginMeta {
+    fn meta(&self) -> PluginMeta {
         PluginMeta {
             id: String::from("pulse"),
             version: Version::parse("0.1.0").unwrap(),
@@ -30,54 +30,84 @@ impl Plugin for PulsePlugin {
     }
 
     fn early_init(&self) {
+        info!("Early init");
         let mut file = File::create("rtti.txt").unwrap();
-        let image = ImageMap::open(current_exe().unwrap().to_str().unwrap()).unwrap();
-        let view = PeView::from_bytes(&image).unwrap();
-        let data_header = view.section_headers().by_name(".data").unwrap();
-        let rdata_header = view.section_headers().by_name(".rdata").unwrap();
+        let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
+        let (rdata_start, rdata_end) = get_rdata_section().unwrap_or((0, 0));
 
-        let is_data_segment = |ptr: u32| {
-            ptr >= data_header.VirtualAddress
-                && ptr < u32::wrapping_add(data_header.VirtualAddress, data_header.SizeOfRawData)
-        };
-
-        let is_rdata_segment = |ptr: u32| {
-            ptr >= rdata_header.VirtualAddress
-                && ptr < u32::wrapping_add(rdata_header.VirtualAddress, rdata_header.SizeOfRawData)
+        let is_valid_ptr = |ptr: usize| {
+            if ptr == 0 {
+                false
+            } else {
+                (ptr >= data_start && ptr < data_end) || (ptr >= rdata_end && ptr < rdata_end)
+            }
         };
 
         let mut types: Vec<*const RTTI> = Vec::new();
 
-        // https://yara.readthedocs.io/en/v3.7.0/writingrules.html#hexadecimal-strings
-        let pat = parse("FF FF FF FF [4]").unwrap();
-        let mut results = view.scanner().matches(
-            &pat,
-            data_header.VirtualAddress
-                ..u32::wrapping_add(data_header.VirtualAddress, data_header.SizeOfRawData),
-        );
-        // let mut results = view.scanner().matches(&pat, view.headers().image_range());
-        let mut save = [0; 32];
-        let save_len = cmp::min(save_len(&pat), save.len());
-        unsafe {
-            while results.next(&mut save[..save_len]) {
-                { use std::io::Write; writeln!(file, "{:x}: {:?}", save[0], save).unwrap(); }
-                let rtti = transmute::<*const uintptr_t, *const RTTI>(save[0] as *const _);
-                { use std::io::Write; writeln!(file, "{}", (*rtti).kind).unwrap(); }
-
-                if let Some(container) = as_container(rtti) {
-                    if !is_data_segment((*container).container_type as u32)
-                        || !is_data_segment((*container).item_type as u32)
+        let mut current: *const c_void = data_start as *const c_void;
+        loop {
+            let rtti_ptr = unsafe { Pat16_scan(current, data_end) };
+            if rtti_ptr.is_null() {
+                break;
+            }
+            current = unsafe { rtti_ptr.add(5) };
+            let rtti = unsafe { &*(rtti_ptr as *const RTTI) };
+            unsafe {
+                if let Some(primitive) = as_primitive(rtti) {
+                    let primitive = &*primitive;
+                    if primitive.size == 0
+                        || primitive.alignment == 0
+                        || (!primitive.constructor.is_null()
+                            && !is_valid_ptr(primitive.constructor as usize))
+                        || (!primitive.destructor.is_null()
+                            && !is_valid_ptr(primitive.destructor as usize))
+                        || !is_valid_ptr(primitive.base_type as usize)
+                        || !is_valid_ptr(primitive.name as usize)
                     {
                         continue;
                     }
-                } else if let Some(_enum) = as_enum(rtti) {
-                    if !is_data_segment((*_enum).name as u32)
-                        || !is_data_segment((*_enum).values as u32)
+                } else if let Some(enum_) = as_enum(rtti) {
+                    let enum_ = &*enum_;
+                    if enum_.size == 0
+                        || !is_valid_ptr(enum_.name as usize)
+                        || !is_valid_ptr(enum_.values as usize)
                     {
                         continue;
                     }
-                } else if let Some(class) = as_compound(rtti) {
-                    if !is_rdata_segment((*class).name as u32) || (*class).alignment <= 0 {
+                } else if let Some(container) = as_container(rtti) {
+                    let container = &*container;
+                    if !is_valid_ptr(container.item_type as usize)
+                        || !is_valid_ptr(container.container_type as usize)
+                        || !is_valid_ptr((&*container.container_type).name as usize)
+                        || (!(&*container.container_type).constructor.is_null()
+                            && !is_valid_ptr((&*container.container_type).constructor as usize))
+                        || (!(&*container.container_type).destructor.is_null()
+                            && !is_valid_ptr((&*container.container_type).destructor as usize))
+                    {
+                        continue;
+                    }
+                } else if let Some(pointer) = as_pointer(rtti) {
+                    let pointer = &*pointer;
+                    if !is_valid_ptr(pointer.item_type as usize)
+                        || !is_valid_ptr(pointer.pointer_type as usize)
+                        || !is_valid_ptr((&*pointer.pointer_type).name as usize)
+                        || (!(&*pointer.pointer_type).constructor.is_null()
+                            && !is_valid_ptr((&*pointer.pointer_type).constructor as usize))
+                        || (!(&*pointer.pointer_type).destructor.is_null()
+                            && !is_valid_ptr((&*pointer.pointer_type).destructor as usize))
+                    {
+                        continue;
+                    }
+                } else if let Some(compound) = as_compound(rtti) {
+                    let compound = &*compound;
+                    if !is_valid_ptr(compound.name as usize)
+                        || (compound.num_bases > 0 && !is_valid_ptr(compound.bases as usize))
+                        || (compound.num_attributes > 0
+                            && !is_valid_ptr(compound.attributes as usize))
+                        || (compound.num_message_handlers > 0
+                            && !is_valid_ptr(compound.message_handlers as usize))
+                    {
                         continue;
                     }
                 } else {
@@ -86,11 +116,12 @@ impl Plugin for PulsePlugin {
 
                 scan_recursively(rtti, &mut types);
             }
-
-            types.iter().for_each(|rtti| {
-                export_type(*rtti, &mut file);
-            });
         }
+
+        info!("scan finished, exporting...");
+        types.iter().for_each(|rtti| unsafe {
+            export_type(*rtti, &mut file);
+        });
     }
 }
 
@@ -105,6 +136,7 @@ unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
     }
 
     types.push(rtti);
+    info!("{}", types.len());
 
     if let Some(container) = as_container(rtti) {
         scan_recursively((*container).item_type, types);
@@ -113,17 +145,15 @@ unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
         scan_recursively((*pointer).item_type, types);
     } else if let Some(primitive) = as_primitive(rtti) {
         scan_recursively((*primitive).base_type, types);
-    } else if let Some(class) = as_compound(rtti) {
-        for base in slice::from_raw_parts((*class).bases, (*class).num_bases as usize) {
+    } else if let Some(compound) = as_compound(rtti) {
+        let compound = &*compound;
+        for base in compound.bases() {
             scan_recursively(base.base, types);
         }
-        for attr in slice::from_raw_parts((*class).attributes, (*class).num_attributes as usize) {
+        for attr in compound.attributes() {
             scan_recursively(attr.base, types);
         }
-        for msg_handler in slice::from_raw_parts(
-            (*class).message_handlers,
-            (*class).num_message_handlers as usize,
-        ) {
+        for msg_handler in compound.message_handlers() {
             scan_recursively(msg_handler.message, types);
         }
     }
@@ -152,8 +182,17 @@ unsafe fn export_type<W: std::io::Write>(rtti: *const RTTI, file: &mut W) {
             )
             .unwrap();
 
-            for msg_handler in slice::from_raw_parts((*class).message_handlers, (*class).num_message_handlers as usize) {
-                writeln!(file, "\t\t{} ({:p})", rtti_name(msg_handler.message), msg_handler.message).unwrap();
+            for msg_handler in slice::from_raw_parts(
+                (*class).message_handlers,
+                (*class).num_message_handlers as usize,
+            ) {
+                writeln!(
+                    file,
+                    "\t\t{} ({:p})",
+                    rtti_name(msg_handler.message),
+                    msg_handler.message
+                )
+                .unwrap();
             }
         }
 
@@ -163,9 +202,16 @@ unsafe fn export_type<W: std::io::Write>(rtti: *const RTTI, file: &mut W) {
                 "\tbases: ({:p}/{})",
                 (*class).bases,
                 (*class).num_bases
-            ).unwrap();
+            )
+            .unwrap();
             for base in slice::from_raw_parts((*class).bases, (*class).num_bases as usize) {
-                writeln!(file, "\t\t{} ({})", rtti_display_name(base.base), base.offset).unwrap();
+                writeln!(
+                    file,
+                    "\t\t{} ({})",
+                    rtti_display_name(base.base),
+                    base.offset
+                )
+                .unwrap();
             }
         }
 
@@ -175,63 +221,59 @@ unsafe fn export_type<W: std::io::Write>(rtti: *const RTTI, file: &mut W) {
                 "\tattributes: ({:p}/{})",
                 (*class).attributes,
                 (*class).num_attributes
-            ).unwrap();
+            )
+            .unwrap();
 
-            for attr in slice::from_raw_parts((*class).attributes, (*class).num_attributes as usize) {
+            for attr in slice::from_raw_parts((*class).attributes, (*class).num_attributes as usize)
+            {
                 if attr.base.is_null() {
-                    writeln!(file, "\t\tcategory: {}", CStr::from_ptr(attr.name).to_str().unwrap()).unwrap();
+                    writeln!(
+                        file,
+                        "\t\tcategory: {}",
+                        CStr::from_ptr(attr.name).to_str().unwrap()
+                    )
+                    .unwrap();
                 } else {
                     writeln!(
                         file,
                         "\t\t{} ({}):",
                         CStr::from_ptr(attr.name).to_str().unwrap(),
                         rtti_display_name(attr.base),
-                    ).unwrap();
-                    writeln!(
-                        file,
-                        "\t\t\toffset: {}",
-                        attr.offset
-                    ).unwrap();
-                    writeln!(
-                        file,
-                        "\t\t\tflags: {}",
-                        attr.flags
-                    ).unwrap();
+                    )
+                    .unwrap();
+                    writeln!(file, "\t\t\toffset: {}", attr.offset).unwrap();
+                    writeln!(file, "\t\t\tflags: {}", attr.flags).unwrap();
                     if !attr.min_value.is_null() {
                         writeln!(
                             file,
                             "\t\t\tmin: {}",
                             CStr::from_ptr(attr.min_value).to_str().unwrap()
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     if !attr.max_value.is_null() {
                         writeln!(
                             file,
                             "\t\t\tmax: {}",
                             CStr::from_ptr(attr.max_value).to_str().unwrap()
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     if !attr.getter.is_null() || !attr.setter.is_null() {
-                        writeln!(
-                            file,
-                            "\t\t\tproperty: true"
-                        ).unwrap();
+                        writeln!(file, "\t\t\tproperty: true").unwrap();
                     }
                 }
             }
         }
     } else if let Some(enum_) = as_enum(rtti) {
-        writeln!(
-            file,
-            "\tsize: {}",
-            (*enum_).size
-        ).unwrap();
+        writeln!(file, "\tsize: {}", (*enum_).size).unwrap();
         writeln!(
             file,
             "\tvalues: ({:p}/{})",
             (*enum_).values,
             (*enum_).num_values
-        ).unwrap();
+        )
+        .unwrap();
         for value in slice::from_raw_parts((*enum_).values, (*enum_).num_values as usize) {
             if value.aliases[0].is_null() {
                 writeln!(
@@ -239,19 +281,32 @@ unsafe fn export_type<W: std::io::Write>(rtti: *const RTTI, file: &mut W) {
                     "\t\t{}: {}",
                     CStr::from_ptr(value.name).to_str().unwrap(),
                     value.value
-                ).unwrap();
+                )
+                .unwrap();
             } else {
                 writeln!(
                     file,
                     "\t\t{}: {} ({})",
                     CStr::from_ptr(value.name).to_str().unwrap(),
                     value.value,
-                    value.aliases.iter().filter(|a| !a.is_null()).map(|p| CStr::from_ptr(*p).to_str().unwrap()).collect::<Vec<_>>().join(", ")
-                ).unwrap();
+                    value
+                        .aliases
+                        .iter()
+                        .filter(|a| !a.is_null())
+                        .map(|p| CStr::from_ptr(*p).to_str().unwrap())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+                .unwrap();
             }
         }
     } else if let Some(primitive) = as_primitive(rtti) {
-        writeln!(file, "\tbase: {}", rtti_display_name((*primitive).base_type)).unwrap();
+        writeln!(
+            file,
+            "\tbase: {}",
+            rtti_display_name((*primitive).base_type)
+        )
+        .unwrap();
     }
 
     writeln!(file).unwrap();

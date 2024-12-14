@@ -5,7 +5,6 @@ use std::env::current_dir;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
-use libloading::{Error, Library};
 use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
 
 pub(crate) fn plugin_paths(game_dir: &PathBuf) -> &Vec<PathBuf> {
@@ -53,12 +52,12 @@ pub(crate) fn plugins(
 
                     match maybe_plugin_func {
                         Ok(plugin_func) => {
-                            let plugin_main_func = lib
-                                .get::<unsafe extern "C" fn(CauldronEnv, PluginMainReason) -> ()>(
-                                    b"__cauldron_api__main",
-                                )
-                                .expect("malformed plugin missing main export.");
-                            plugin_main_func(env.clone(), PluginMainReason::Load);
+                            // let plugin_main_func = lib
+                            //     .get::<unsafe extern "C" fn(CauldronEnv, PluginMainReason) -> ()>(
+                            //         b"__cauldron_api__main",
+                            //     )
+                            //     .expect("malformed plugin missing main export.");
+                            // plugin_main_func(env.clone(), PluginMainReason::Load);
                             plugins.push(plugin_func());
                         }
                         Err(_) => {
@@ -111,6 +110,8 @@ pub(crate) fn on_dll_attach() {
 
     // do early init
     plugins.iter().for_each(|plugin| {
+        info!("early init: {}", plugin.meta().id);
         plugin.early_init();
+        info!("early init finished: {}", plugin.meta().id);
     });
 }

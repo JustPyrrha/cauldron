@@ -77,7 +77,7 @@ impl Default for OptionalPluginMeta {
 }
 
 pub trait Plugin {
-    fn meta(self) -> PluginMeta;
+    fn meta(&self) -> PluginMeta;
 
     /// Run as soon as the load order has been finalized.
     fn early_init(&self) {}
@@ -102,7 +102,7 @@ pub trait PluginOps: Plugin {
     #[doc(hidden)]
     fn env_lock() -> &'static OnceLock<Box<CauldronEnv>>;
     #[doc(hidden)]
-    fn init(env: CauldronEnv);
+    fn init();
 }
 
 impl<P> PluginOps for P
@@ -118,8 +118,8 @@ where
         &ENV
     }
 
-    fn init(env: CauldronEnv) {
-        Self::env_lock().set(Box::new(env)).unwrap();
+    fn init() {
+        // Self::env_lock().set(Box::new(env)).unwrap();
     }
 }
 
@@ -142,19 +142,34 @@ macro_rules! define_plugin {
             }
 
             #[no_mangle]
-            unsafe extern "C" fn __cauldron_api__main(
-                env: $crate::CauldronEnv,
-                reason: $crate::PluginMainReason,
-            ) -> () {
+            unsafe extern "C" fn __cauldron_api__main(reason: $crate::PluginMainReason) -> () {
                 match reason {
                     $crate::PluginMainReason::Load => {
-                        <$t as $crate::PluginOps>::init(env);
+                        <$t as $crate::PluginOps>::init();
                     }
                     _ => {}
                 }
             }
         }
     };
+}
+
+pub mod log {
+    pub use log::Level;
+
+    #[macro_export]
+    macro_rules! error {
+        ($($arg:tt)+) => (::log::log!(::log::Level::Error, $($arg)+))
+    }
+    #[macro_export]
+    macro_rules! warn {
+        ($($arg:tt)+) => (::log::log!(::log::Level::Warn, $($arg)+))
+    }
+
+    #[macro_export]
+    macro_rules! info {
+        ($($arg:tt)+) => (::log::log!(::log::Level::Info, $($arg)+))
+    }
 }
 
 #[no_mangle]

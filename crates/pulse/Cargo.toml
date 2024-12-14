@@ -10,9 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 cauldron.workspace = true
-faithe.workspace = true
 log.workspace = true
-simplelog = {workspace = true, features = ["paris"]}
-windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_SystemInformation", "Win32_System_SystemServices"] }
-pelite = "0.10.0"
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Diagnostics_Debug", "Win32_System_SystemInformation", "Win32_System_SystemServices"] }
 libc.workspace = true
+pattern16.workspace = true

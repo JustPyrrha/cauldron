@@ -1,7 +1,7 @@
 use libc::{c_char, c_void};
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter};
-use std::mem;
+use std::{mem, slice};
 // rtti reversing work by shadeless: https://github.com/ShadelessFox/decima-native/blob/hfw-injector/
 // todo: add a proper credits section to readme lol
 
@@ -295,6 +295,32 @@ pub unsafe fn as_compound(rtti: *const RTTI) -> Option<*const RTTICompound> {
     }
 }
 
+impl RTTICompound {
+    pub unsafe fn bases(&self) -> &[RTTIBase] {
+        if self.num_bases > 0 {
+            slice::from_raw_parts(self.bases, self.num_bases as usize)
+        } else {
+            &[]
+        }
+    }
+
+    pub unsafe fn attributes(&self) -> &[RTTIAttribute] {
+        if self.num_attributes > 0 {
+            slice::from_raw_parts(self.attributes, self.num_attributes as usize)
+        } else {
+            &[]
+        }
+    }
+
+    pub unsafe fn message_handlers(&self) -> &[RTTIMessageHandler] {
+        if self.num_message_handlers > 0 {
+            slice::from_raw_parts(self.message_handlers, self.num_message_handlers as usize)
+        } else {
+            &[]
+        }
+    }
+}
+
 pub unsafe fn rtti_name(rtti: *const RTTI) -> String {
     if let Some(compound) = as_compound(rtti) {
         CStr::from_ptr((*compound).name)
@@ -303,7 +329,7 @@ pub unsafe fn rtti_name(rtti: *const RTTI) -> String {
             .to_string()
     } else if let Some(_enum) = as_enum(rtti) {
         CStr::from_ptr((*_enum).name).to_str().unwrap().to_string()
-    } else if let Some(primitive) = as_pointer(rtti) {
+    } else if let Some(primitive) = as_primitive(rtti) {
         CStr::from_ptr((*primitive).name)
             .to_str()
             .unwrap()
