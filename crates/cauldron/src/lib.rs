@@ -2,14 +2,16 @@
 #![doc = include_str!("../README.md")]
 #![allow(clippy::missing_safety_doc)]
 
-mod loader;
+pub mod loader;
 pub mod prelude;
 pub mod version;
+mod core_plugin;
 
 use crate::loader::on_dll_attach;
 use crate::version::{GameType, RuntimeVersion};
 use semver::{Version, VersionReq};
 use std::sync::OnceLock;
+use std::thread;
 
 #[derive(Debug, Clone)]
 pub struct PluginDependency {
@@ -42,36 +44,99 @@ pub struct PluginMeta {
     /// The Decima game the plugin is compatible with.
     pub game: GameType,
 
-    /// Extra meta that isn't required.
-    pub optional: OptionalPluginMeta,
-}
-
-#[derive(Debug, Clone)]
-pub struct OptionalPluginMeta {
     /// Which version(s) of the game the plugin is compatible with.
     pub runtime_version: RuntimeVersion,
 
     /// The plugin's name.
-    pub name: String,
+    pub name: Option<String>,
 
     /// The plugin's authors.
-    pub authors: Vec<String>,
+    pub authors: Option<Vec<String>>,
 
     /// The plugin's description.
-    pub description: String,
+    pub description: Option<String>,
 
     /// The plugin's dependencies on other plugins.
-    pub dependencies: Vec<PluginDependency>,
+    pub dependencies: Option<Vec<PluginDependency>>,
 }
 
-impl Default for OptionalPluginMeta {
-    fn default() -> Self {
+impl PluginMeta {
+    pub fn builder(
+        id: &str,
+        version: Version
+    ) -> PluginMetaBuilder {
+        PluginMetaBuilder::new(id, version)
+    }
+}
+
+pub struct PluginMetaBuilder {
+    id: String,
+    version: Version,
+    name: Option<String>,
+    authors: Option<Vec<String>>,
+    description: Option<String>,
+    game: GameType,
+    runtime_version: RuntimeVersion,
+    dependencies: Option<Vec<PluginDependency>>,
+}
+
+impl PluginMetaBuilder {
+    fn new(
+        id: &str,
+        version: Version,
+    ) -> Self {
         Self {
+            id: id.to_string(),
+            version,
+            game: GameType::GameIndependent,
             runtime_version: RuntimeVersion::VersionIndependent,
-            name: String::new(),
-            authors: Vec::new(),
-            description: String::new(),
-            dependencies: Vec::new(),
+            name: None,
+            authors: None,
+            description: None,
+            dependencies: None,
+        }
+    }
+
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = Some(name.to_string());
+        self
+    }
+
+    pub fn authors(mut self, authors: Vec<&str>) -> Self {
+        self.authors = Some(authors.iter().map(|s| s.to_string()).collect());
+        self
+    }
+
+    pub fn description(mut self, description: &str) -> Self {
+        self.description = Some(description.to_string());
+        self
+    }
+
+    pub fn game(mut self, game: GameType) -> Self {
+        self.game = game;
+        self
+    }
+
+    pub fn runtime_version(mut self, runtime_version: RuntimeVersion) -> Self {
+        self.runtime_version = runtime_version;
+        self
+    }
+
+    pub fn dependencies(mut self, dependencies: Vec<PluginDependency>) -> Self {
+        self.dependencies = Some(dependencies);
+        self
+    }
+
+    pub fn build(self) -> PluginMeta {
+        PluginMeta {
+            id: self.id,
+            version: self.version,
+            game: self.game,
+            runtime_version: self.runtime_version,
+            name: self.name,
+            authors: self.authors,
+            description: self.description,
+            dependencies: self.dependencies,
         }
     }
 }
@@ -158,9 +223,20 @@ pub mod log {
     pub use log::Level;
 
     #[macro_export]
+    macro_rules! trace {
+        ($($arg:tt)+) => (::log::log!(::log::Level::Trace, $($arg)+))
+    }
+
+    #[macro_export]
+    macro_rules! debug {
+        ($($arg:tt)+) => (::log::log!(::log::Level::Debug, $($arg)+))
+    }
+
+    #[macro_export]
     macro_rules! error {
         ($($arg:tt)+) => (::log::log!(::log::Level::Error, $($arg)+))
     }
+
     #[macro_export]
     macro_rules! warn {
         ($($arg:tt)+) => (::log::log!(::log::Level::Warn, $($arg)+))

@@ -14,3 +14,4 @@ log.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Diagnostics_Debug", "Win32_System_SystemInformation", "Win32_System_SystemServices"] }
 libc.workspace = true
 pattern16.workspace = true
+bitflags = "2.6.0"

@@ -2,35 +2,30 @@
 
 mod memory;
 mod types;
+mod ida;
 
 use crate::memory::{get_data_section, get_rdata_section};
-use crate::types::{
-    as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name,
-    RTTIKind, RTTI,
-};
+use crate::types::{as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name, RTTIContainerData, RTTIKind, RTTIPointerData, RTTI};
 use cauldron::prelude::*;
 use cauldron::version::GameType;
 use cauldron::{define_plugin, info, Plugin, PluginMeta};
 use pattern16::Pat16_scan;
 use std::ffi::{c_void, CStr};
 use std::fs::File;
-use std::io::Write;
 use std::slice;
+use crate::ida::export_ida_type;
 
-pub struct PulsePlugin;
+pub struct PulsePlugin {}
 
 impl Plugin for PulsePlugin {
     fn meta(&self) -> PluginMeta {
-        PluginMeta {
-            id: String::from("pulse"),
-            version: Version::parse("0.1.0").unwrap(),
-            game: GameType::HorizonForbiddenWest,
-            optional: Default::default(),
-        }
+        PluginMeta::builder("pulse", Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
+            .game(GameType::HorizonForbiddenWest)
+            .build()
     }
 
     fn early_init(&self) {
-        info!("Early init");
+        info!("pulse: scanning for rtti structures...");
         let mut file = File::create("rtti.txt").unwrap();
         let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
         let (rdata_start, rdata_end) = get_rdata_section().unwrap_or((0, 0));
@@ -39,7 +34,7 @@ impl Plugin for PulsePlugin {
             if ptr == 0 {
                 false
             } else {
-                (ptr >= data_start && ptr < data_end) || (ptr >= rdata_end && ptr < rdata_end)
+                (ptr >= data_start && ptr < data_end) || (ptr >= rdata_start && ptr < rdata_end)
             }
         };
 
@@ -118,17 +113,30 @@ impl Plugin for PulsePlugin {
             }
         }
 
-        info!("scan finished, exporting...");
+        info!("pulse: scan finished, found {}. exporting...", types.len());
         types.iter().for_each(|rtti| unsafe {
             export_type(*rtti, &mut file);
         });
+        {
+            use std::io::Write;
+            info!("pulse: exporting types for ida...");
+            let mut ida_file = File::create("hfw_ggrtti.idc").unwrap();
+            let mut existing_containers = Vec::<*mut RTTIContainerData>::new();
+            let mut existing_pointers = Vec::<*mut RTTIPointerData>::new();
+            writeln!(ida_file, "#include <idc.idc>\n\nstatic main() {{").unwrap();
+            types.iter().for_each(|rtti| unsafe {
+                export_ida_type(*rtti, &mut ida_file, &mut existing_containers, &mut existing_pointers).unwrap();
+            });
+            writeln!(ida_file, "}}").unwrap();
+        }
+        info!("pulse: done");
     }
 }
 
 unsafe impl Sync for PulsePlugin {}
 unsafe impl Send for PulsePlugin {}
 
-define_plugin!(PulsePlugin, PulsePlugin {});
+define_plugin!(PulsePlugin, PulsePlugin { });
 
 unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
     if rtti.is_null() || types.contains(&rtti) {
@@ -136,7 +144,6 @@ unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
     }
 
     types.push(rtti);
-    info!("{}", types.len());
 
     if let Some(container) = as_container(rtti) {
         scan_recursively((*container).item_type, types);

@@ -1,0 +1,10 @@
+[package]
+name = "minhook"
+version = "1.0.0"
+edition.workspace = true
+
+[dependencies]
+log.workspace = true
+
+[build-dependencies]
+cc.workspace = true

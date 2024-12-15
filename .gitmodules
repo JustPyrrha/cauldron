@@ -1,3 +1,6 @@
 [submodule "crates/pattern16/vendor/Pattern16"]
 	path = crates/pattern16/vendor/Pattern16
 	url = https://github.com/Dasaav-dsv/Pattern16.git
+[submodule "crates/minhook/vendor/minhook"]
+	path = crates/minhook/vendor/minhook
+	url = https://github.com/TsudaKageyu/minhook.git

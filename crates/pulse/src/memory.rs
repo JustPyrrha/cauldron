@@ -1,5 +1,3 @@
-use std::ffi::CStr;
-use std::fs::File;
 use windows::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;

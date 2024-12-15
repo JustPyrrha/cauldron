@@ -2,6 +2,7 @@ use libc::{c_char, c_void};
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter};
 use std::{mem, slice};
+use bitflags::bitflags;
 // rtti reversing work by shadeless: https://github.com/ShadelessFox/decima-native/blob/hfw-injector/
 // todo: add a proper credits section to readme lol
 
@@ -20,12 +21,20 @@ pub enum RTTIKind {
     Unknown = u8::MAX,
 }
 
+bitflags! {
+    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+    pub struct RTTIFlags: u8 {
+        const RTTIFactory_Registered = 0x2;
+        const FactoryManager_Registered = 0x4;
+    }
+}
+
 #[derive(Debug)]
 #[repr(C, packed(1))]
 pub struct RTTI {
     pub id: u32,
     pub kind: RTTIKind,
-    pub factory_flags: u8,
+    pub factory_flags: RTTIFlags,
 }
 
 #[derive(Debug)]
@@ -197,6 +206,14 @@ pub struct RTTIPrimitive {
     pub get_size_in_memory: *mut c_void,
     pub compare_strings: *mut c_void,
     pub representation_type: *mut RTTI,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct RTTIPod {
+    pub base: RTTI,
+    pub size: u32,
+    pub name: *const c_char,
 }
 
 // macro_rules! assert_offset {
