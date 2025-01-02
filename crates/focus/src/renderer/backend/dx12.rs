@@ -135,7 +135,7 @@ impl RenderEngine for D3D12RenderEngine {
 }
 
 impl D3D12RenderEngine {
-    pub fn new(command_queue: &ID3D12CommandQueue, ctx: &mut Context) -> Result<Self> {
+    pub fn new(command_queue: &ID3D12CommandQueue, _ctx: &mut Context) -> Result<Self> {
         let (device, command_queue, command_allocator, command_list) =
             unsafe { create_command_objects(command_queue) }?;
 
@@ -173,7 +173,6 @@ impl D3D12RenderEngine {
     ) -> Result<()> {
         self.texture_heap.update(egui_output.textures_delta)?;
         if egui_output.shapes.is_empty() {
-            trace!("egui tried to render no shapes.");
             return Ok(());
         }
         let frame_size = {

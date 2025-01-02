@@ -1,0 +1,10 @@
+schema_version = 0
+
+[cauldron]
+id = "hello-cauldron"
+version = "0.1.0-alpha"
+
+[cauldron.metadata]
+name = "Hello Cauldron"
+description = "Blank Cauldron Plugin."
+contributors = [ "JustPyrrha" ]

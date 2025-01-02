@@ -1,0 +1,10 @@
+schema_version = 0
+
+[cauldron]
+id = "pulse"
+version = "0.1.0-alpha"
+
+[cauldron.metadata]
+name = "Pulse"
+description = "GGRTTI dumper and exporter."
+contributors = [ "JustPyrrha" ]

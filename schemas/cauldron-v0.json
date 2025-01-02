@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/JustPyrrha/cauldron/main/schemas/cauldron-v0.json",
+  "title": "Cauldron Plugin Metadata v0",
+  "description": "Initial version of the Cauldron plugin metadata, until the release of v1 this is subject to change at any time.",
+  "$comment": "the initial draft of this is heavily inspired by <https://github.com/QuiltMC/quilt-json-schema> <3",
+  "type": "object",
+  "$defs": {
+    "plugin_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-_]{1,63}"
+    },
+    "semver_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 0,
+      "default": 0
+    },
+    "cauldron": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/plugin_id"
+        },
+        "version": {
+          "$ref": "#/$defs/semver_version"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "contributors": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "required": ["id", "version"]
+    }
+  },
+  "required": ["schema_version", "cauldron"]
+}

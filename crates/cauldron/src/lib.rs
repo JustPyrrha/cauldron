@@ -2,226 +2,227 @@
 #![doc = include_str!("../README.md")]
 #![allow(clippy::missing_safety_doc)]
 
-pub mod loader;
-pub mod prelude;
+mod core_ui;
+
+pub mod metadata;
 pub mod version;
-mod core_plugin;
 
-use crate::loader::on_dll_attach;
-use crate::version::{GameType, RuntimeVersion};
-use semver::{Version, VersionReq};
-use std::sync::OnceLock;
-use std::thread;
+use crate::metadata::{ContributorsList, PluginMetadataSchemaVersionOnly, PluginMetadataV0};
+use ::log::LevelFilter;
+use egui::TextBuffer;
+use serde_derive::Deserialize;
+use simplelog::{ColorChoice, Config, TerminalMode};
+use std::cell::OnceCell;
+use std::collections::HashMap;
+use std::env::current_dir;
+use std::fs;
+use std::fs::{DirEntry, File};
+use std::ops::Add;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
+use toml::Value;
+use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
 
-#[derive(Debug, Clone)]
-pub struct PluginDependency {
-    /// The ID of the plugin to depend on.
-    pub id: String,
-    /// The version requirements of the dependency.
-    pub versions: VersionReq,
+pub trait CauldronPlugin {
+    fn new() -> Self
+    where
+        Self: Sized;
+    fn on_init(&self, _loader: &CauldronLoader) {}
+    fn on_deinit(&self) {}
 }
 
-impl PluginDependency {
-    /// Creates a new plugin dependency spec.
-    pub fn new(id: impl Into<String>, versions: VersionReq) -> Self {
-        Self {
-            id: id.into(),
-            versions,
-        }
-    }
+pub type PluginBox = Box<dyn CauldronPlugin + Send + Sync>;
+
+pub struct PluginContainer {
+    pub plugin: PluginBox,
+    pub handle: libloading::Library,
+    pub metadata: PluginMetadataV0,
 }
 
-#[derive(Debug, Clone)]
-pub struct PluginMeta {
-    // todo: theres a lot of plugin meta and it gets kinda messy, maybe replace with a toml file?
-    /// The plugin's ID.
-    /// MUST match ^[a-z][a-z0-9-_]{1,63}$
-    pub id: String,
-
-    /// The plugin's SemVer compliant version.
-    pub version: Version,
-
-    /// The Decima game the plugin is compatible with.
-    pub game: GameType,
-
-    /// Which version(s) of the game the plugin is compatible with.
-    pub runtime_version: RuntimeVersion,
-
-    /// The plugin's name.
-    pub name: Option<String>,
-
-    /// The plugin's authors.
-    pub authors: Option<Vec<String>>,
-
-    /// The plugin's description.
-    pub description: Option<String>,
-
-    /// The plugin's dependencies on other plugins.
-    pub dependencies: Option<Vec<PluginDependency>>,
+pub struct CauldronLoader {
+    // <id, plugin>
+    pub plugins: HashMap<String, PluginContainer>,
 }
 
-impl PluginMeta {
-    pub fn builder(
-        id: &str,
-        version: Version
-    ) -> PluginMetaBuilder {
-        PluginMetaBuilder::new(id, version)
-    }
-}
-
-pub struct PluginMetaBuilder {
-    id: String,
-    version: Version,
-    name: Option<String>,
-    authors: Option<Vec<String>>,
-    description: Option<String>,
-    game: GameType,
-    runtime_version: RuntimeVersion,
-    dependencies: Option<Vec<PluginDependency>>,
-}
-
-impl PluginMetaBuilder {
-    fn new(
-        id: &str,
-        version: Version,
-    ) -> Self {
-        Self {
-            id: id.to_string(),
-            version,
-            game: GameType::GameIndependent,
-            runtime_version: RuntimeVersion::VersionIndependent,
-            name: None,
-            authors: None,
-            description: None,
-            dependencies: None,
-        }
-    }
-
-    pub fn name(mut self, name: &str) -> Self {
-        self.name = Some(name.to_string());
-        self
-    }
-
-    pub fn authors(mut self, authors: Vec<&str>) -> Self {
-        self.authors = Some(authors.iter().map(|s| s.to_string()).collect());
-        self
-    }
-
-    pub fn description(mut self, description: &str) -> Self {
-        self.description = Some(description.to_string());
-        self
-    }
-
-    pub fn game(mut self, game: GameType) -> Self {
-        self.game = game;
-        self
-    }
-
-    pub fn runtime_version(mut self, runtime_version: RuntimeVersion) -> Self {
-        self.runtime_version = runtime_version;
-        self
-    }
-
-    pub fn dependencies(mut self, dependencies: Vec<PluginDependency>) -> Self {
-        self.dependencies = Some(dependencies);
-        self
-    }
-
-    pub fn build(self) -> PluginMeta {
-        PluginMeta {
-            id: self.id,
-            version: self.version,
-            game: self.game,
-            runtime_version: self.runtime_version,
-            name: self.name,
-            authors: self.authors,
-            description: self.description,
-            dependencies: self.dependencies,
-        }
-    }
-}
-
-pub trait Plugin {
-    fn meta(&self) -> PluginMeta;
-
-    /// Run as soon as the load order has been finalized.
-    fn early_init(&self) {}
-}
-
-#[derive(Debug, Clone)]
-pub struct CauldronEnv {}
-
-impl CauldronEnv {
-    #[doc(hidden)]
+impl CauldronLoader {
     pub fn new() -> Self {
-        CauldronEnv {}
-    }
-}
-
-unsafe impl Sync for CauldronEnv {}
-unsafe impl Send for CauldronEnv {}
-
-pub trait PluginOps: Plugin {
-    fn env() -> &'static CauldronEnv;
-
-    #[doc(hidden)]
-    fn env_lock() -> &'static OnceLock<Box<CauldronEnv>>;
-    #[doc(hidden)]
-    fn init();
-}
-
-impl<P> PluginOps for P
-where
-    P: Plugin,
-{
-    fn env() -> &'static CauldronEnv {
-        Self::env_lock().get().unwrap()
+        CauldronLoader {
+            plugins: HashMap::new(),
+        }
     }
 
-    fn env_lock() -> &'static OnceLock<Box<CauldronEnv>> {
-        static ENV: OnceLock<Box<CauldronEnv>> = OnceLock::new();
-        &ENV
+    unsafe fn try_find_plugins(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+
+        let dir = current_dir().expect("CauldronLoader::try_find_plugins current_dir failed");
+        let dir = dir.join("cauldron").join("plugins");
+
+        if !dir.exists() {
+            let _ = fs::create_dir_all(&dir);
+        }
+
+        //todo: theres a better way to do this, without duplicating code.
+        for entry in fs::read_dir(dir)
+            .expect("CauldronLoader::try_find_plugins failed to read plugins directory")
+        {
+            let Ok(entry) = entry else {
+                continue;
+            };
+            let entry = entry.path();
+            if entry.is_dir() {
+                for entry in fs::read_dir(entry)
+                    .expect("CauldronLoader::try_find_plugins failed to plugin read directory")
+                {
+                    let Ok(entry) = entry else {
+                        continue;
+                    };
+                    let entry = entry.path();
+                    if entry.to_str().unwrap().ends_with(".dll") {
+                        paths.push(entry);
+                    }
+                }
+            } else if entry.to_str().unwrap().ends_with(".dll") {
+                paths.push(entry);
+            }
+        }
+
+        paths
     }
 
-    fn init() {
-        // Self::env_lock().set(Box::new(env)).unwrap();
+    unsafe fn try_load_plugin(&mut self, plugin_path: &PathBuf) {
+        let handle = libloading::Library::new(&plugin_path);
+        let Ok(handle) = handle else {
+            error!("cauldron: failed to load plugin: {}", plugin_path.display());
+            return;
+        };
+        let metadata =
+            handle.get::<extern "C" fn() -> &'static str>(b"__cauldron_plugin__metadata\0");
+        let Ok(metadata) = metadata else {
+            error!(
+                "cauldron: not a valid plugin (missing metadata export): {}",
+                plugin_path.display()
+            );
+            return;
+        };
+        let plugin = handle.get::<extern "C" fn() -> PluginBox>(b"__cauldron_plugin__new\0");
+        let Ok(plugin) = plugin else {
+            error!(
+                "cauldron: not a valid plugin (missing create instance export): {}",
+                plugin_path.display()
+            );
+            return;
+        };
+        let metadata_str = metadata();
+        let metadata = toml::from_str::<PluginMetadataSchemaVersionOnly>(metadata_str);
+        let Ok(metadata) = metadata else {
+            error!(
+                "cauldron: failed to parse plugin metadata: {}",
+                plugin_path.display()
+            );
+            return;
+        };
+        let metadata = match metadata.schema_version {
+            0 => toml::from_str::<PluginMetadataV0>(metadata_str),
+            // when added new plugin meta versions, do migrations from old to new here.
+            _ => {
+                return;
+            }
+        };
+        let Ok(metadata) = metadata else {
+            error!(
+                "cauldron: failed to parse plugin metadata: {}",
+                plugin_path.display()
+            );
+            return;
+        };
+        let plugin = plugin();
+        self.plugins.insert(
+            metadata.cauldron.id.clone(),
+            PluginContainer {
+                plugin,
+                handle,
+                metadata,
+            },
+        );
+        // todo: load order sorting
     }
-}
 
-pub enum PluginMainReason {
-    Load,
-    Unload,
+    fn do_plugin_init(&self) {
+        let mut table = tabled::builder::Builder::new();
+        table.push_record(["Order", "Id", "Version", "Name", "Description", "Authors"]);
+        self.plugins
+            .iter()
+            .enumerate()
+            .for_each(|(index, (id, plugin))| {
+                let mut name = String::new();
+                let mut description = String::new();
+                let mut authors = String::new();
+
+                if plugin.metadata.cauldron.metadata.is_some() {
+                    let meta = plugin.metadata.cauldron.metadata.as_ref().unwrap();
+                    name = meta.name.clone().unwrap_or(String::new());
+                    description = meta.description.clone().unwrap_or(String::new());
+                    if meta.contributors.is_some() {
+                        let contributors = meta.contributors.as_ref().unwrap();
+                        match contributors {
+                            ContributorsList::Plain(contributors) => {
+                                authors = contributors.join(", ");
+                            }
+                            ContributorsList::WithRoles(contributors) => {
+                                authors = contributors
+                                    .keys()
+                                    .map(|a| a.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                            }
+                        }
+                    }
+                }
+
+                table.push_record([
+                    format!("{}", index),
+                    format!("{}", id),
+                    format!("{}", &plugin.metadata.cauldron.version),
+                    format!("{}", name),
+                    format!("{}", description),
+                    format!("{}", authors),
+                ]);
+            });
+        info!(
+            "cauldron: found {} plugins:\n{}",
+            self.plugins.len(),
+            table.build()
+        );
+
+        info!("cauldron: initializing plugins...");
+        self.plugins.iter().for_each(|(_, plugin)| {
+            plugin.plugin.on_init(&self);
+        });
+        info!("cauldron: plugins initialized.");
+    }
 }
 
 #[macro_export]
-macro_rules! define_plugin {
-    ($t:ty, $f:expr) => {
+macro_rules! define_cauldron_plugin {
+    ($plugin:ty, $meta:expr) => {
         #[cfg(not(test))]
-        mod __cauldron_api {
+        mod __cauldron_plugin {
             use super::*;
 
             #[no_mangle]
-            unsafe extern "C" fn __cauldron_api__plugin(
-            ) -> Box<dyn $crate::Plugin + Send + Sync + 'static> {
-                Box::<$t>::new($f)
+            extern "C" fn __cauldron_plugin__metadata() -> &'static str {
+                $meta
             }
 
             #[no_mangle]
-            unsafe extern "C" fn __cauldron_api__main(reason: $crate::PluginMainReason) -> () {
-                match reason {
-                    $crate::PluginMainReason::Load => {
-                        <$t as $crate::PluginOps>::init();
-                    }
-                    _ => {}
-                }
+            extern "C" fn __cauldron_plugin__new() -> $crate::PluginBox {
+                Box::new(<$plugin as $crate::CauldronPlugin>::new())
             }
         }
     };
 }
 
 pub mod log {
-    pub use log::Level;
-
     #[macro_export]
     macro_rules! trace {
         ($($arg:tt)+) => (::log::log!(::log::Level::Trace, $($arg)+))
@@ -248,13 +249,56 @@ pub mod log {
     }
 }
 
-#[no_mangle]
-unsafe extern "system" fn DllMain(_: isize, reason: u32, _: usize) -> bool {
-    if reason == 1u32
-    /*DLL_PROCESS_ATTACH*/
-    {
-        // todo: check if we need to spawn a thread for this
-        on_dll_attach();
+#[doc(hidden)]
+static mut INSTANCE: OnceCell<CauldronLoader> = OnceCell::new();
+
+#[doc(hidden)]
+pub unsafe fn handle_dll_attach() {
+    unsafe {
+        AllocConsole();
+        AttachConsole(ATTACH_PARENT_PROCESS);
     }
-    true
+
+    simplelog::CombinedLogger::init(vec![
+        simplelog::TermLogger::new(
+            LevelFilter::Trace,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ),
+        simplelog::WriteLogger::new(
+            LevelFilter::Debug,
+            Config::default(),
+            File::create("cauldron/cauldron.log").unwrap(),
+        ),
+    ])
+    .unwrap();
+
+    info!("cauldron: starting v{}...", env!("CARGO_PKG_VERSION"));
+
+    INSTANCE.get_or_init(|| {
+        let mut instance = CauldronLoader::new();
+        let paths = instance.try_find_plugins();
+        for path in paths {
+            instance.try_load_plugin(&path);
+        }
+        instance.do_plugin_init();
+
+        instance
+    });
+
+    focus::util::enable_debug_interface(false);
+    focus::Focus::builder()
+        .with::<focus::hooks::dx12::Dx12Hooks>(core_ui::CauldronUI::new(
+            INSTANCE
+                .get()
+                .unwrap()
+                .plugins
+                .iter()
+                .map(|v| v.1.metadata.clone())
+                .collect::<Vec<_>>(),
+        ))
+        .build()
+        .apply()
+        .unwrap();
 }

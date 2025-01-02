@@ -22,7 +22,6 @@ fn main() {
     let _ = bindgen::Builder::default()
         .header("wrapper.hpp")
         .allowlist_function("Pat16::.*")
-        .allowlist_function("Pat16::Impl::.*")
         .opaque_type("Pattern16::Impl::CacheSerialized")
         .opaque_type("Pattern16::Impl::Frequencies16")
         .opaque_type("std::.*")

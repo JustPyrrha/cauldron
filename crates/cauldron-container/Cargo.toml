@@ -1,0 +1,13 @@
+[package]
+name = "cauldron-container"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "A simple wrapper for loading cauldron at runtime."
+
+[lib]
+name = "cauldron"
+crate-type = ["cdylib"]
+
+[dependencies]
+cauldron.workspace = true

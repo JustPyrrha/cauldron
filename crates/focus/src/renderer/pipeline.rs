@@ -115,8 +115,7 @@ impl Pipeline {
             .message_filter
             .store(message_filter.bits(), Ordering::SeqCst);
 
-        self.render_loop
-            .before_render(&mut self.ctx);
+        self.render_loop.before_render(&mut self.ctx);
 
         Ok(raw_input)
     }
@@ -127,7 +126,7 @@ impl Pipeline {
         render_target: ID3D12Resource,
     ) -> Result<()> {
         let output = self.ctx.run(raw_input, |ctx| self.render_loop.render(ctx));
-        let (renderer_output, platform_output, _) = split_output(output);
+        let (renderer_output, _platform_output, _) = split_output(output);
         self.engine
             .render(&mut self.ctx, renderer_output, render_target)?;
         Ok(())

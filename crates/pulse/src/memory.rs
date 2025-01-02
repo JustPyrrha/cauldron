@@ -1,3 +1,6 @@
+use pattern16::Pat16_scan;
+use std::ffi::CString;
+use std::os::raw::c_void;
 use windows::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
@@ -83,4 +86,29 @@ pub fn get_rdata_section() -> Option<(usize, usize)> {
 
 pub fn get_data_section() -> Option<(usize, usize)> {
     get_section(".data") // todo: cache
+}
+
+pub fn find_pattern(start: *const u8, end: usize, signature: &str) -> Option<*const c_void> {
+    let cstr = CString::new(signature).unwrap();
+    let result = unsafe { Pat16_scan(start as *const c_void, end, cstr.as_ptr()) };
+    if result.is_null() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+pub unsafe fn get_memory_at(addr: &*const u8, size: usize) -> &[u8] {
+    std::slice::from_raw_parts(*addr, size)
+}
+
+pub fn find_offset_from(sig: &str, add: u32) -> Option<usize> {
+    let (module_start, module_end) = get_module()?;
+    let addr = find_pattern(module_start as *const u8, module_end, sig)?;
+    if addr.is_null() {
+        return None;
+    }
+
+    let offset = (addr as u32) + add + size_of::<i32>() as u32;
+    Some((addr as u32 + add + offset - module_start as u32) as usize)
 }

@@ -1,8 +1,9 @@
+use crate::p_core::array::GGArray;
+use bitflags::bitflags;
 use libc::{c_char, c_void};
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter};
 use std::{mem, slice};
-use bitflags::bitflags;
 // rtti reversing work by shadeless: https://github.com/ShadelessFox/decima-native/blob/hfw-injector/
 // todo: add a proper credits section to readme lol
 
@@ -214,6 +215,145 @@ pub struct RTTIPod {
     pub base: RTTI,
     pub size: u32,
     pub name: *const c_char,
+}
+
+#[repr(u32)]
+#[derive(Debug)]
+pub enum SymbolKind {
+    Atom = 0,
+    Enum = 1,
+    Class = 2,
+    Struct = 3,
+    Typedef = 4,
+    Function = 5,
+    Variable = 6,
+    Container = 7,
+    SourceFile = 8,
+
+    Unknown = u32::MAX,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct SymbolSignaturePart {
+    pub name: *const c_char,
+    pub modifiers: *const c_char,
+    pub unknown_10: *mut c_void,
+    pub unknown_18: *mut c_void,
+    pub unknown_20: bool,
+}
+
+impl SymbolSignaturePart {
+    pub fn name(&self) -> &str {
+        unsafe { CStr::from_ptr(self.name) }.to_str().unwrap()
+    }
+
+    pub fn modifiers(&self) -> &str {
+        unsafe { CStr::from_ptr(self.modifiers) }.to_str().unwrap()
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct SymbolLanguageInfo {
+    pub rtti: *const RTTI,
+    pub name: *const c_char,
+    pub unknown_10: *mut c_void,
+    pub unknown_18: *mut c_void,
+    pub signature: GGArray<SymbolSignaturePart>,
+    pub unknown_30: *mut c_void,
+    pub unknown_38: *mut c_void,
+    pub unknown_40: *mut c_void,
+    pub unknown_48: *mut c_void,
+    pub unknown_50: *mut c_void,
+    pub unknown_58: *mut c_void,
+    pub unknown_60: *const c_char,
+    pub unknown_68: *const c_char,
+}
+
+impl SymbolLanguageInfo {
+    pub fn name(&self) -> &str {
+        unsafe { CStr::from_ptr(self.name) }.to_str().unwrap()
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ExportedSymbolMember {
+    pub kind: SymbolKind,
+    pub rtti: *const RTTI,
+    pub namespace: *const c_char,
+    pub name: *const c_char,
+    pub unknown_20: *mut c_void,
+    pub unknown_28: *mut c_void,
+    pub language_info: [SymbolLanguageInfo; 3],
+}
+
+impl ExportedSymbolMember {
+    pub fn name(&self) -> &str {
+        unsafe { CStr::from_ptr(self.name) }.to_str().unwrap()
+    }
+    pub fn namespace(&self) -> &str {
+        unsafe { CStr::from_ptr(self.namespace) }.to_str().unwrap()
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ExportedSymbolsGroup {
+    pub vtable: *const ExportedSymbolsGroupVTable,
+    pub always_export: bool,
+    pub namespace: *const c_char,
+    pub members: GGArray<ExportedSymbolMember>,
+    pub dependencies: GGArray<*const RTTI>,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ExportedSymbolsGroupVTable {
+    pub destructor: extern "C" fn(*mut ExportedSymbolsGroup),
+    pub get_rtti: extern "C" fn(*const ExportedSymbolsGroup) -> *const RTTI,
+    pub register_symbols: extern "C" fn(*mut ExportedSymbolsGroup),
+}
+
+impl ExportedSymbolsGroup {
+    pub fn get_rtti(&self) -> *const RTTI {
+        unsafe { ((*self.vtable).get_rtti)(self) }
+    }
+}
+
+impl From<u32> for SymbolKind {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => SymbolKind::Atom,
+            1 => SymbolKind::Enum,
+            2 => SymbolKind::Class,
+            3 => SymbolKind::Struct,
+            4 => SymbolKind::Typedef,
+            5 => SymbolKind::Function,
+            6 => SymbolKind::Variable,
+            7 => SymbolKind::Container,
+            8 => SymbolKind::SourceFile,
+            _ => SymbolKind::Unknown,
+        }
+    }
+}
+
+impl Display for SymbolKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SymbolKind::Atom => f.write_str("Atom"),
+            SymbolKind::Enum => f.write_str("Enum"),
+            SymbolKind::Class => f.write_str("Class"),
+            SymbolKind::Struct => f.write_str("Struct"),
+            SymbolKind::Typedef => f.write_str("Typedef"),
+            SymbolKind::Function => f.write_str("Function"),
+            SymbolKind::Variable => f.write_str("Variable"),
+            SymbolKind::Container => f.write_str("Container"),
+            SymbolKind::SourceFile => f.write_str("SourceFile"),
+            SymbolKind::Unknown => f.write_str("Unknown"),
+        }
+    }
 }
 
 // macro_rules! assert_offset {

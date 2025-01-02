@@ -1,0 +1,13 @@
+[package]
+name = "hello-cauldron"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Blank Cauldron plugin."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cauldron.workspace = true
+log.workspace = true

@@ -188,7 +188,6 @@ unsafe extern "system" fn dxgi_swap_chain_present_impl(
         util::print_dxgi_debug_messages();
         error!("render error: {e:?}");
     }
-    trace!("Call IDXGISwapChain::Present trampoline");
     dxgi_swap_chain_present(swap_chain, sync_interval, flags)
 }
 
@@ -204,7 +203,6 @@ unsafe extern "system" fn dxgi_swap_chain_resize_buffers_impl(
         dxgi_swap_chain_resize_buffers,
         ..
     } = TRAMPOLINES.get().expect("dx12 trampolines not initialized");
-    trace!("Call IDXGISwapChain::ResizeBuffers trampoline");
     dxgi_swap_chain_resize_buffers(this, buffer_count, width, height, new_format, flags)
 }
 
@@ -213,8 +211,6 @@ unsafe extern "system" fn d3d12_command_queue_execute_command_lists_impl(
     num_command_lists: u32,
     command_lists: *mut ID3D12CommandList,
 ) {
-    trace!("ID3D12::ExecuteCommandLists({command_queue:?}, {num_command_lists}, {command_lists:?}) invoked.");
-
     {
         INITIALIZATION_CONTEXT
             .lock()
@@ -241,13 +237,11 @@ fn get_target_addrs() -> (
     let factory: IDXGIFactory2 =
         unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)) }.unwrap();
 
-
     let adapter = unsafe { factory.EnumAdapters(0) }.unwrap();
 
     let device: ID3D12Device =
         util::try_out_ptr(|v| unsafe { D3D12CreateDevice(&adapter, D3D_FEATURE_LEVEL_11_0, v) })
             .expect("failed to create device");
-
 
     let command_queue: ID3D12CommandQueue = unsafe {
         device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {

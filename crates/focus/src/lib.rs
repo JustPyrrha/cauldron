@@ -6,7 +6,6 @@ use egui::RawInput;
 use minhook::{MH_ApplyQueued, MH_Initialize, MH_Uninitialize, MhHook, MH_STATUS};
 use std::cell::OnceCell;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 
 pub mod hooks;
 pub mod renderer;
@@ -16,15 +15,9 @@ static mut MODULE: OnceCell<isize> = OnceCell::new();
 static mut SUNWING: OnceCell<Focus> = OnceCell::new();
 
 pub trait EguiRenderLoop {
-    fn initialize<'a>(
-        &'a mut self,
-        _ctx: &'a egui::Context,
-    ) {}
+    fn initialize<'a>(&'a mut self, _ctx: &'a egui::Context) {}
 
-    fn before_render<'a>(
-        &'a mut self,
-        _ctx: &'a egui::Context,
-    ) {}
+    fn before_render<'a>(&'a mut self, _ctx: &'a egui::Context) {}
 
     fn render(&mut self, ctx: &egui::Context);
 

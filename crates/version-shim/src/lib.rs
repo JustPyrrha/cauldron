@@ -30,7 +30,7 @@ extern "system" fn DllMain(_: isize, reason: u32, _: usize) -> bool {
 
 fn inject_loader() {
     unsafe {
-        LoadLibraryA(s!("cauldron.dll"));
+        LoadLibraryA(s!("cauldron\\cauldron.dll"));
     };
 }
 

@@ -52,7 +52,6 @@ impl Fence {
         self.value.fetch_add(1, Ordering::SeqCst);
     }
 
-
     pub fn wait(&self) -> windows::core::Result<()> {
         let value = self.value();
         unsafe {

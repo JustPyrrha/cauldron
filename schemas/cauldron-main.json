@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/JustPyrrha/cauldron/main/schemas/cauldron-main.json",
+  "title": "Cauldron Plugin Metadata (Version Agnostic)",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "enum": [0],
+      "default": 0
+    }
+  },
+  "oneOf": [
+    {
+      "allOf": [
+        {
+          "properties": {
+            "schema_version": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "$ref": "https://raw.githubusercontent.com/JustPyrrha/cauldron/main/schemas/cauldron-v0.json"
+        }
+      ]
+    }
+  ],
+  "required": ["schema_version"]
+}
