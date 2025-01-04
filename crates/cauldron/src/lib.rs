@@ -19,6 +19,7 @@ use std::env::{current_dir, current_exe};
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
+use egui::Key;
 use semver::{Version, VersionReq};
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK};
 use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
@@ -394,18 +395,23 @@ pub unsafe fn handle_dll_attach() {
         instance
     });
 
-    focus::util::enable_debug_interface(false);
-    focus::Focus::builder()
-        .with::<focus::hooks::dx12::Dx12Hooks>(core_ui::CauldronUI::new(
-            INSTANCE
-                .get()
-                .unwrap()
-                .plugins
-                .iter()
-                .map(|p| p.metadata.clone())
-                .collect::<Vec<_>>(),
-        ))
-        .build()
-        .apply()
-        .unwrap();
+    if config.ui.enabled {
+        if config.ui.enable_dx12_debug {
+            focus::util::enable_debug_interface(config.ui.enable_dx12_debug_gpu_validation);
+        }
+        focus::Focus::builder()
+            .with::<focus::hooks::dx12::Dx12Hooks>(core_ui::CauldronUI::new(
+                INSTANCE
+                    .get()
+                    .unwrap()
+                    .plugins
+                    .iter()
+                    .map(|p| p.metadata.clone())
+                    .collect::<Vec<_>>(),
+                Key::from_name(config.ui.key.as_str()).expect("cauldron: failed to parse ui key")
+            ))
+            .build()
+            .apply()
+            .unwrap();
+    }
 }

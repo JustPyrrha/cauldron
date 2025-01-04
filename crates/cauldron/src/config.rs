@@ -20,6 +20,8 @@ pub struct CauldronConfig {
     #[serde(default)]
     pub logging: CauldronConfigLoggingSection,
     #[serde(default)]
+    pub ui: CauldronConfigUiSeciton,
+    #[serde(default)]
     pub game: Option<CauldronConfigGameSection>,
 }
 
@@ -28,6 +30,7 @@ impl Default for CauldronConfig {
         CauldronConfig {
             config_version: 0,
             logging: CauldronConfigLoggingSection::default(),
+            ui: CauldronConfigUiSeciton::default(),
             game: None,
         }
     }
@@ -101,6 +104,25 @@ impl Default for CauldronConfigGameSection {
         CauldronConfigGameSection {
             override_game: None,
             override_version: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CauldronConfigUiSeciton {
+    pub enabled: bool,
+    pub key: String,
+    pub enable_dx12_debug: bool,
+    pub enable_dx12_debug_gpu_validation: bool,
+}
+
+impl Default for CauldronConfigUiSeciton {
+    fn default() -> Self {
+        CauldronConfigUiSeciton {
+            enabled: true,
+            key: "`".to_string(),
+            enable_dx12_debug: true,
+            enable_dx12_debug_gpu_validation: false
         }
     }
 }

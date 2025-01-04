@@ -8,11 +8,12 @@ pub struct CauldronUI {
     ui_open: bool,
     ui_plugins_open: bool,
     ui_egui: EguiToggles,
+    open_key: Key,
     plugins: Vec<PluginMetadataV0>,
 }
 
 impl CauldronUI {
-    pub fn new(plugins: Vec<PluginMetadataV0>) -> CauldronUI {
+    pub fn new(plugins: Vec<PluginMetadataV0>, open_key: Key) -> CauldronUI {
         CauldronUI {
             ui_open: false,
             ui_plugins_open: false,
@@ -21,6 +22,7 @@ impl CauldronUI {
                 inspection: false,
                 memory: false,
             },
+            open_key,
             plugins,
         }
     }
@@ -33,7 +35,7 @@ impl EguiRenderLoop for CauldronUI {
     }
 
     fn before_render<'a>(&'a mut self, ctx: &'a Context) {
-        if ctx.input(|f| f.key_pressed(Key::Backtick)) {
+        if ctx.input(|f| f.key_pressed(self.open_key)) {
             self.ui_open = !self.ui_open;
         }
     }
