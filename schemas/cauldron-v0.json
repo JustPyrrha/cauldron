@@ -66,6 +66,29 @@
               ]
             }
           }
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string"
+                  },
+                  "optional": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": ["version"]
+              }
+            ]
+          }
         }
       },
       "required": ["id", "version"]

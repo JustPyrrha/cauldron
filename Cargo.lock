@@ -201,10 +201,11 @@ dependencies = [
  "log",
  "semver",
  "serde",
- "serde_derive",
  "simplelog",
  "tabled",
  "toml",
+ "toml_edit",
+ "windows",
  "windows-sys",
 ]
 

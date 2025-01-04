@@ -16,7 +16,7 @@ use crate::types::{
     as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name,
     ExportedSymbolsGroup, RTTIContainerData, RTTIKind, RTTIPointerData, RTTI,
 };
-use cauldron::version::GameType;
+use cauldron::version::CauldronGameType;
 use cauldron::{debug, define_cauldron_plugin, info, CauldronLoader, CauldronPlugin};
 use std::ffi::{c_void, CStr};
 use std::fs::File;

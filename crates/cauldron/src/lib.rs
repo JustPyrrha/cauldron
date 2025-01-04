@@ -4,24 +4,26 @@
 
 mod core_ui;
 
+pub mod config;
 pub mod metadata;
 pub mod version;
+pub mod util;
 
-use crate::metadata::{ContributorsList, PluginMetadataSchemaVersionOnly, PluginMetadataV0};
-use ::log::LevelFilter;
-use egui::TextBuffer;
-use serde_derive::Deserialize;
-use simplelog::{ColorChoice, Config, TerminalMode};
+use crate::config::load_config;
+use crate::metadata::{ContributorsList, PluginMetadataDependency, PluginMetadataSchemaVersionOnly, PluginMetadataV0};
+use simplelog::{ColorChoice, Config, SharedLogger, TerminalMode};
 use std::cell::OnceCell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::env::current_dir;
+use std::env::{current_dir, current_exe};
 use std::fs;
-use std::fs::{DirEntry, File};
-use std::ops::Add;
+use std::fs::File;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicUsize;
-use toml::Value;
+use semver::{Version, VersionReq};
+use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK};
 use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
+use crate::util::message_box;
+use crate::version::{CauldronGameType, GameVersion};
 
 pub trait CauldronPlugin {
     fn new() -> Self
@@ -39,15 +41,24 @@ pub struct PluginContainer {
     pub metadata: PluginMetadataV0,
 }
 
+pub struct GameInfo {
+    pub game_type: CauldronGameType,
+    pub version: GameVersion,
+}
+
 pub struct CauldronLoader {
-    // <id, plugin>
-    pub plugins: HashMap<String, PluginContainer>,
+    pub plugins: Vec<PluginContainer>,
+    pub game: GameInfo,
 }
 
 impl CauldronLoader {
     pub fn new() -> Self {
         CauldronLoader {
-            plugins: HashMap::new(),
+            plugins: Vec::new(),
+            game: GameInfo {
+                game_type: CauldronGameType::find_from_exe().unwrap(),
+                version: version::version()
+            }
         }
     }
 
@@ -123,7 +134,7 @@ impl CauldronLoader {
         };
         let metadata = match metadata.schema_version {
             0 => toml::from_str::<PluginMetadataV0>(metadata_str),
-            // when added new plugin meta versions, do migrations from old to new here.
+            // when adding new plugin meta versions, do migrations from old to new here.
             _ => {
                 return;
             }
@@ -136,15 +147,102 @@ impl CauldronLoader {
             return;
         };
         let plugin = plugin();
-        self.plugins.insert(
-            metadata.cauldron.id.clone(),
+        self.plugins.push(
             PluginContainer {
                 plugin,
                 handle,
                 metadata,
             },
         );
-        // todo: load order sorting
+
+        self.sort_and_validate_plugins();
+    }
+
+    fn sort_and_validate_plugins(&mut self) {
+        self.plugins.sort_by(|a, b| {
+            let a_id = &a.metadata.cauldron.id.clone();
+            let b_id = &b.metadata.cauldron.id.clone();
+            let a_deps = a.metadata.cauldron.dependencies.clone();
+            let b_deps = b.metadata.cauldron.dependencies.clone();
+
+            if a_deps.as_ref().is_some_and(|a | a.contains_key(b_id)) &&
+                b_deps.as_ref().is_some_and(|b| b.contains_key(a_id)) {
+                error!("cauldron: circular dependencies detected. ({} and {} depend on each other.)", a_id, b_id);
+                message_box("cauldron: plugin error", format!("Circular dependencies detected.\n{} and {} depend on each other.", a_id, b_id).as_str(), MB_OK | MB_ICONERROR);
+                std::process::exit(0);
+            } else if a_deps.as_ref().is_some_and(|a| a.contains_key(b_id)) {
+                Ordering::Greater
+            } else if b_deps.as_ref().is_some_and(|b| b.contains_key(a_id)) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+
+        let mut ids = self.plugins.iter().map(|p| p.metadata.cauldron.id.clone()).collect::<Vec<_>>();
+        ids.push(self.game.game_type.id().clone());
+        let mut versions: HashMap<String, Version> = HashMap::new();
+        self.plugins.iter().for_each(|p| {
+            let Ok(version) = Version::parse(p.metadata.cauldron.version.clone().as_str()) else {
+                error!("cauldron: {}'s version ({}) does not match semver requirements. exiting...", p.metadata.cauldron.id, p.metadata.cauldron.version);
+                message_box("cauldron: plugin error", format!("{}'s version ({}) does not match semver requirements.", p.metadata.cauldron.id, p.metadata.cauldron.version).as_str(), MB_OK | MB_ICONERROR);
+                std::process::exit(0);
+            };
+            versions.insert(p.metadata.cauldron.id.clone(), version);
+        });
+
+        for plugin in &self.plugins {
+            if plugin.metadata.cauldron.dependencies.is_some() {
+                for (dep, constraints) in &plugin.metadata.cauldron.dependencies.clone().unwrap() {
+                    if dep.as_str() == self.game.game_type.id().as_str() {
+                        // todo: validate version requirements for game version
+                        continue;
+                    }
+                    match constraints {
+                        PluginMetadataDependency::Plain(version) => {
+                            let Ok(version_req) = VersionReq::parse(version.as_str()) else {
+                                error!("cauldron: malformed dependency version requirement constraint {} in {}", version, plugin.metadata.cauldron.id);
+                                message_box("cauldron: plugin error", format!("malformed dependency version requirement constraint {} in {}.", version, plugin.metadata.cauldron.id).as_str(), MB_OK | MB_ICONERROR);
+                                std::process::exit(0);
+                            };
+
+                            if versions.contains_key(dep) {
+                                if !version_req.matches(&versions[dep]) {
+                                    error!("{} {} {}", version_req.to_string(), &versions[dep].to_string(), dep);
+
+                                    error!("cauldron: plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, version);
+                                    message_box("cauldron: plugin error", format!("plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, version).as_str(), MB_OK | MB_ICONERROR);
+                                    std::process::exit(0);
+                                }
+                            } else {
+                                error!("cauldron: plugin {} is missing dependency {} {}", plugin.metadata.cauldron.id, dep, version);
+                                message_box("cauldron: plugin error", format!("plugin {} is missing dependency {} {}", plugin.metadata.cauldron.id, dep, version).as_str(), MB_OK | MB_ICONERROR);
+                                std::process::exit(0);
+                            }
+                        }
+                        PluginMetadataDependency::Detailed(detailed) => {
+                            let Ok(version_req) = VersionReq::parse(detailed.version.as_str()) else {
+                                error!("cauldron: malformed dependency version requirement constraint {} in {}", detailed.version, plugin.metadata.cauldron.id);
+                                message_box("cauldron: plugin error", format!("malformed dependency version requirement constraint {} in {}.", detailed.version, plugin.metadata.cauldron.id).as_str(), MB_OK | MB_ICONERROR);
+                                std::process::exit(0);
+                            };
+
+                            if versions.contains_key(dep) {
+                                if !version_req.matches(&versions[dep]) {
+                                    error!("cauldron: plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, detailed.version);
+                                    message_box("cauldron: plugin error", format!("plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, detailed.version).as_str(), MB_OK | MB_ICONERROR);
+                                    std::process::exit(0);
+                                }
+                            } else if !detailed.optional {
+                                error!("cauldron: plugin {} is missing dependency {} ({})", plugin.metadata.cauldron.id, dep, detailed.version);
+                                message_box("cauldron: plugin error", format!("plugin {} is missing dependency {} {}", plugin.metadata.cauldron.id, dep, detailed.version).as_str(), MB_OK | MB_ICONERROR);
+                                std::process::exit(0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn do_plugin_init(&self) {
@@ -153,7 +251,7 @@ impl CauldronLoader {
         self.plugins
             .iter()
             .enumerate()
-            .for_each(|(index, (id, plugin))| {
+            .for_each(|(index, plugin)| {
                 let mut name = String::new();
                 let mut description = String::new();
                 let mut authors = String::new();
@@ -181,7 +279,7 @@ impl CauldronLoader {
 
                 table.push_record([
                     format!("{}", index),
-                    format!("{}", id),
+                    format!("{}", &plugin.metadata.cauldron.id),
                     format!("{}", &plugin.metadata.cauldron.version),
                     format!("{}", name),
                     format!("{}", description),
@@ -195,7 +293,7 @@ impl CauldronLoader {
         );
 
         info!("cauldron: initializing plugins...");
-        self.plugins.iter().for_each(|(_, plugin)| {
+        self.plugins.iter().for_each(|plugin| {
             plugin.plugin.on_init(&self);
         });
         info!("cauldron: plugins initialized.");
@@ -254,30 +352,39 @@ static mut INSTANCE: OnceCell<CauldronLoader> = OnceCell::new();
 
 #[doc(hidden)]
 pub unsafe fn handle_dll_attach() {
-    unsafe {
-        AllocConsole();
-        AttachConsole(ATTACH_PARENT_PROCESS);
-    }
+    let config = load_config();
+    let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
+    if config.logging.show_console {
+        unsafe {
+            AllocConsole();
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
 
-    simplelog::CombinedLogger::init(vec![
-        simplelog::TermLogger::new(
-            LevelFilter::Trace,
+        loggers.push(simplelog::TermLogger::new(
+            config.logging.console_level.to_log(),
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
-        ),
-        simplelog::WriteLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
-            File::create("cauldron/cauldron.log").unwrap(),
-        ),
-    ])
-    .unwrap();
+        ))
+    }
+    loggers.push(simplelog::WriteLogger::new(
+        config.logging.file_level.to_log(),
+        Config::default(),
+        File::create(config.logging.file_path).unwrap(),
+    ));
+    simplelog::CombinedLogger::init(loggers).unwrap();
 
     info!("cauldron: starting v{}...", env!("CARGO_PKG_VERSION"));
 
+    if CauldronGameType::find_from_exe().is_none() {
+        error!("cauldron: Unknown game type \"{}\", exiting.", current_exe().unwrap().file_name().unwrap().to_str().unwrap());
+        message_box("Game Unknown", "Cauldron as detected an unknown game type and will now exit.", MB_OK | MB_ICONERROR);
+        std::process::exit(0);
+    }
+
+    #[allow(static_mut_refs)]
     INSTANCE.get_or_init(|| {
-        let mut instance = CauldronLoader::new();
+       let mut instance = CauldronLoader::new();
         let paths = instance.try_find_plugins();
         for path in paths {
             instance.try_load_plugin(&path);
@@ -295,7 +402,7 @@ pub unsafe fn handle_dll_attach() {
                 .unwrap()
                 .plugins
                 .iter()
-                .map(|v| v.1.metadata.clone())
+                .map(|p| p.metadata.clone())
                 .collect::<Vec<_>>(),
         ))
         .build()

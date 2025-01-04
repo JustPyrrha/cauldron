@@ -8,3 +8,6 @@ version = "0.1.0-alpha"
 name = "Pulse"
 description = "GGRTTI dumper and exporter."
 contributors = [ "JustPyrrha" ]
+
+[cauldron.dependencies]
+hfw = "*" # Horizon Forbidden West
