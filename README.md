@@ -1,3 +1,5 @@
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/JustPyrrha/cauldron/build.yml?style=flat-square&logo=rust)
+
 # cauldron
 A decima plugin loader.
 
