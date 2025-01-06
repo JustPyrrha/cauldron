@@ -6,6 +6,7 @@ mod memory;
 mod types;
 
 pub mod p_core;
+mod json;
 
 use crate::ida::export_ida_type;
 use crate::memory::{
@@ -16,12 +17,11 @@ use crate::types::{
     as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name,
     ExportedSymbolsGroup, RTTIContainerData, RTTIKind, RTTIPointerData, RTTI,
 };
-use cauldron::version::CauldronGameType;
 use cauldron::{debug, define_cauldron_plugin, info, CauldronLoader, CauldronPlugin};
 use std::ffi::{c_void, CStr};
 use std::fs::File;
 use std::slice;
-use std::sync::OnceLock;
+use crate::json::export_types_json;
 
 pub struct PulsePlugin {}
 
@@ -32,7 +32,6 @@ impl CauldronPlugin for PulsePlugin {
 
     fn on_init(&self, _loader: &CauldronLoader) {
         info!("pulse: scanning for rtti structures...");
-        let mut file = File::create("rtti.txt").unwrap();
         let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
         let (rdata_start, rdata_end) = get_rdata_section().unwrap_or((0, 0));
 
@@ -121,9 +120,7 @@ impl CauldronPlugin for PulsePlugin {
         }
 
         info!("pulse: scan finished, found {}. exporting...", types.len());
-        types.iter().for_each(|rtti| unsafe {
-            export_type(*rtti, &mut file);
-        });
+        export_types_json(&types);
         // info!("pulse: exporting symbols");
         // export_symbols();
         // info!("pulse: symbols exported");
@@ -180,159 +177,6 @@ unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
             scan_recursively(msg_handler.message, types);
         }
     }
-}
-
-unsafe fn export_type<W: std::io::Write>(rtti: *const RTTI, file: &mut W) {
-    if (*rtti).kind == RTTIKind::Pointer
-        || (*rtti).kind == RTTIKind::Container
-        || (*rtti).kind == RTTIKind::POD
-    {
-        return;
-    }
-
-    writeln!(file, "{} ({})", rtti_display_name(rtti), (*rtti).kind).unwrap();
-
-    if let Some(class) = as_compound(rtti) {
-        writeln!(file, "\tversion: {}", (*class).version).unwrap();
-        writeln!(file, "\tflags: {}", (*class).flags).unwrap();
-
-        if (*class).num_message_handlers > 0 {
-            writeln!(
-                file,
-                "\tmessage_handlers: ({:p}/{})",
-                (*class).message_handlers,
-                (*class).num_message_handlers
-            )
-            .unwrap();
-
-            for msg_handler in slice::from_raw_parts(
-                (*class).message_handlers,
-                (*class).num_message_handlers as usize,
-            ) {
-                writeln!(
-                    file,
-                    "\t\t{} ({:p})",
-                    rtti_name(msg_handler.message),
-                    msg_handler.message
-                )
-                .unwrap();
-            }
-        }
-
-        if (*class).num_bases > 0 {
-            writeln!(
-                file,
-                "\tbases: ({:p}/{})",
-                (*class).bases,
-                (*class).num_bases
-            )
-            .unwrap();
-            for base in slice::from_raw_parts((*class).bases, (*class).num_bases as usize) {
-                writeln!(
-                    file,
-                    "\t\t{} ({})",
-                    rtti_display_name(base.base),
-                    base.offset
-                )
-                .unwrap();
-            }
-        }
-
-        if (*class).num_attributes > 0 {
-            writeln!(
-                file,
-                "\tattributes: ({:p}/{})",
-                (*class).attributes,
-                (*class).num_attributes
-            )
-            .unwrap();
-
-            for attr in slice::from_raw_parts((*class).attributes, (*class).num_attributes as usize)
-            {
-                if attr.base.is_null() {
-                    writeln!(
-                        file,
-                        "\t\tcategory: {}",
-                        CStr::from_ptr(attr.name).to_str().unwrap()
-                    )
-                    .unwrap();
-                } else {
-                    writeln!(
-                        file,
-                        "\t\t{} ({}):",
-                        CStr::from_ptr(attr.name).to_str().unwrap(),
-                        rtti_display_name(attr.base),
-                    )
-                    .unwrap();
-                    writeln!(file, "\t\t\toffset: {}", attr.offset).unwrap();
-                    writeln!(file, "\t\t\tflags: {}", attr.flags).unwrap();
-                    if !attr.min_value.is_null() {
-                        writeln!(
-                            file,
-                            "\t\t\tmin: {}",
-                            CStr::from_ptr(attr.min_value).to_str().unwrap()
-                        )
-                        .unwrap();
-                    }
-                    if !attr.max_value.is_null() {
-                        writeln!(
-                            file,
-                            "\t\t\tmax: {}",
-                            CStr::from_ptr(attr.max_value).to_str().unwrap()
-                        )
-                        .unwrap();
-                    }
-                    if !attr.getter.is_null() || !attr.setter.is_null() {
-                        writeln!(file, "\t\t\tproperty: true").unwrap();
-                    }
-                }
-            }
-        }
-    } else if let Some(enum_) = as_enum(rtti) {
-        writeln!(file, "\tsize: {}", (*enum_).size).unwrap();
-        writeln!(
-            file,
-            "\tvalues: ({:p}/{})",
-            (*enum_).values,
-            (*enum_).num_values
-        )
-        .unwrap();
-        for value in slice::from_raw_parts((*enum_).values, (*enum_).num_values as usize) {
-            if value.aliases[0].is_null() {
-                writeln!(
-                    file,
-                    "\t\t{}: {}",
-                    CStr::from_ptr(value.name).to_str().unwrap(),
-                    value.value
-                )
-                .unwrap();
-            } else {
-                writeln!(
-                    file,
-                    "\t\t{}: {} ({})",
-                    CStr::from_ptr(value.name).to_str().unwrap(),
-                    value.value,
-                    value
-                        .aliases
-                        .iter()
-                        .filter(|a| !a.is_null())
-                        .map(|p| CStr::from_ptr(*p).to_str().unwrap())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-                .unwrap();
-            }
-        }
-    } else if let Some(primitive) = as_primitive(rtti) {
-        writeln!(
-            file,
-            "\tbase: {}",
-            rtti_display_name((*primitive).base_type)
-        )
-        .unwrap();
-    }
-
-    writeln!(file).unwrap();
 }
 
 fn export_symbols() {

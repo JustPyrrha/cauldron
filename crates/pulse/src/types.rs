@@ -478,6 +478,34 @@ impl RTTICompound {
     }
 }
 
+impl RTTIEnum {
+    pub unsafe fn values(&self) -> &[RTTIValue] {
+        if self.num_values > 0 {
+            slice::from_raw_parts(self.values, self.num_values as usize)
+        } else {
+            &[]
+        }
+    }
+}
+
+impl RTTIValue {
+    pub unsafe fn aliases(&self) -> Option<Vec<String>> {
+        if self.aliases[0].is_null() {
+            None
+        } else {
+            let mut aliases = Vec::new();
+            for alias in &self.aliases {
+                if !alias.is_null() {
+                    let cstr = CStr::from_ptr(*alias);
+                    aliases.push(cstr.to_str().unwrap().to_string());
+                }
+            }
+
+            Some(aliases)
+        }
+    }
+}
+
 pub unsafe fn rtti_name(rtti: *const RTTI) -> String {
     if let Some(compound) = as_compound(rtti) {
         CStr::from_ptr((*compound).name)
