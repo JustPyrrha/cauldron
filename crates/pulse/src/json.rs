@@ -1,10 +1,10 @@
 use std::io::Write as _;
 
-use std::ffi::CStr;
-use std::fs::File;
+use crate::types::{as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_name, RTTI};
 use json_writer::JSONObjectWriter;
 use libc::c_char;
-use crate::types::{as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_name, RTTI};
+use std::ffi::CStr;
+use std::fs::File;
 
 /// Export [Decima Workshop](https://github.com/ShadelessFox/decima) compatible json types.
 ///
@@ -29,7 +29,7 @@ fn export_type_json(
     ty: *const RTTI,
     writer: &mut JSONObjectWriter,
     containers: &mut Vec<String>,
-    pointers: &mut Vec<String>
+    pointers: &mut Vec<String>,
 ) {
     unsafe {
         if let Some(container) = as_container(ty) {

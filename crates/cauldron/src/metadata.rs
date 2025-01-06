@@ -30,7 +30,7 @@ pub struct PluginMetadataCauldron {
     pub id: String,
     pub version: String,
     pub metadata: Option<PluginMetadataCauldronMetadata>,
-    pub dependencies: Option<HashMap<String, PluginMetadataDependency>>
+    pub dependencies: Option<HashMap<String, PluginMetadataDependency>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

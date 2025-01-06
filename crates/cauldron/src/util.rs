@@ -8,7 +8,7 @@ pub(crate) fn message_box(title: &str, text: &str, icon: MESSAGEBOX_STYLE) {
             HWND(std::ptr::null_mut()),
             PCWSTR::from_raw(HSTRING::from(text).as_ptr()),
             PCWSTR::from_raw(HSTRING::from(title).as_ptr()),
-            icon
+            icon,
         );
     }
 }

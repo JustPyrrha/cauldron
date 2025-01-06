@@ -5,10 +5,11 @@ mod ida;
 mod memory;
 mod types;
 
-pub mod p_core;
 mod json;
+pub mod p_core;
 
 use crate::ida::export_ida_type;
+use crate::json::export_types_json;
 use crate::memory::{
     find_offset_from, find_pattern, get_data_section, get_module, get_rdata_section,
 };
@@ -21,7 +22,6 @@ use cauldron::{debug, define_cauldron_plugin, info, CauldronLoader, CauldronPlug
 use std::ffi::{c_void, CStr};
 use std::fs::File;
 use std::slice;
-use crate::json::export_types_json;
 
 pub struct PulsePlugin {}
 

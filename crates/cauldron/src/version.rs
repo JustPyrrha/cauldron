@@ -26,7 +26,7 @@ impl CauldronGameType {
         match self {
             CauldronGameType::HorizonForbiddenWest => String::from("hfw"),
             CauldronGameType::HorizonZeroDawn => String::from("hzd"),
-            CauldronGameType::HorizonZeroDawnRemastered => String::from("hzdr")
+            CauldronGameType::HorizonZeroDawnRemastered => String::from("hzdr"),
         }
     }
 
@@ -35,26 +35,36 @@ impl CauldronGameType {
             "hfw" => Some(CauldronGameType::HorizonForbiddenWest),
             "hzd" => Some(CauldronGameType::HorizonZeroDawn),
             "hzdr" => Some(CauldronGameType::HorizonZeroDawnRemastered),
-            _ => None
+            _ => None,
         }
     }
 }
 
 impl CauldronGameType {
     pub fn find_from_exe() -> Option<Self> {
-        match current_exe().unwrap().file_name().unwrap().to_str().unwrap() {
+        match current_exe()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+        {
             "HorizonForbiddenWest.exe" => Some(Self::HorizonForbiddenWest),
             "HorizonZeroDawn.exe" => Some(Self::HorizonZeroDawn),
             "HorizonZeroDawnRemastered.exe" => Some(Self::HorizonZeroDawn),
-            &_ => None
+            &_ => None,
         }
     }
 }
 
 pub fn version() -> GameVersion {
     let path = current_exe().unwrap();
-    let mut version_info_size =
-        unsafe { GetFileVersionInfoSizeW(PCWSTR::from_raw(HSTRING::from(path.as_path()).as_ptr()), None) };
+    let mut version_info_size = unsafe {
+        GetFileVersionInfoSizeW(
+            PCWSTR::from_raw(HSTRING::from(path.as_path()).as_ptr()),
+            None,
+        )
+    };
     let mut version_info_buf = vec![0u8; version_info_size as usize];
     unsafe {
         GetFileVersionInfoW(
@@ -63,7 +73,7 @@ pub fn version() -> GameVersion {
             version_info_size,
             version_info_buf.as_mut_ptr() as _,
         )
-            .unwrap()
+        .unwrap()
     };
 
     let mut version_info: *mut VS_FIXEDFILEINFO = ptr::null_mut();
