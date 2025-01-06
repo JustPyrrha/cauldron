@@ -121,7 +121,7 @@ impl Default for CauldronConfigUiSeciton {
         CauldronConfigUiSeciton {
             enabled: true,
             key: "`".to_string(),
-            enable_dx12_debug: true,
+            enable_dx12_debug: false,
             enable_dx12_debug_gpu_validation: false,
         }
     }
