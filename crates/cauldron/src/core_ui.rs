@@ -1,5 +1,5 @@
 use crate::metadata::{ContributorsList, PluginMetadataV0};
-use egui::{Context, Key, Window};
+use egui::{Color32, Context, FontDefinitions, Key, Vec2, Window};
 use egui_extras::{Column, TableBuilder};
 use focus::EguiRenderLoop;
 
@@ -32,6 +32,19 @@ impl EguiRenderLoop for CauldronUI {
     fn initialize<'a>(&'a mut self, ctx: &'a Context) {
         egui_extras::install_image_loaders(ctx);
         // catppuccin_egui::set_theme(ctx, catppuccin_egui::MOCHA);
+
+        ctx.set_fonts(FontDefinitions::default());
+        let mut visuals = ctx.style().visuals.clone();
+        visuals.window_shadow.offset = Vec2::new(2.0, 4.0);
+        visuals.window_shadow.blur = 10.0;
+        visuals.window_shadow.spread = 0.0;
+        visuals.window_shadow.color = Color32::from_rgba_premultiplied(
+            visuals.window_shadow.color.r(),
+            visuals.window_shadow.color.g(),
+            visuals.window_shadow.color.b(),
+            26,
+        );
+        ctx.set_visuals(visuals);
     }
 
     fn before_render<'a>(&'a mut self, ctx: &'a Context) {
