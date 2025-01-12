@@ -1,0 +1,19 @@
+[package]
+name = "libdecima"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Generated bindings for Decima RTTI types."
+
+[build-dependencies]
+codegen = "0.2.0"
+serde = "1.0.217"
+serde_json = "1.0.135"
+chrono = "0.4.39"
+syn = "2.0.96"
+
+[features]
+default = ["hfw"]
+
+# Supported Games
+hfw = [] # Horizon Forbidden West

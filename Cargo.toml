@@ -5,6 +5,7 @@ members = [
     "crates/cauldron-container",
     "crates/focus",
     "crates/hello-cauldron",
+    "crates/libdecima",
     "crates/minhook",
     "crates/pattern16",
     "crates/pulse",
@@ -21,6 +22,7 @@ authors = ["Pyrrha Wills <pyrrha.social@gmail.com>"]
 [workspace.dependencies]
 cauldron = { version = "0.1.0-alpha", path = "crates/cauldron" }
 focus = { version = "0.1.0-alpha", path = "crates/focus" }
+libdecima = { version = "0.1.0-alpha", path = "crates/libdecima" }
 minhook = { version = "1.0.0", path = "crates/minhook" }
 pattern16 = { version = "1.0.0", path = "crates/pattern16" }
 
