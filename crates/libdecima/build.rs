@@ -2,10 +2,10 @@ use chrono::prelude::Utc;
 use codegen::{Block, Field, Module, Scope, Struct, Type, Variant};
 use serde_json::{Map, Value};
 use std::cmp::PartialEq;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::{env, fs};
-use std::collections::HashMap;
 
 fn main() {
     // println!("cargo:rerun-if-changed=build.rs");
@@ -75,33 +75,31 @@ impl From<&String> for RTTIToRustTypes {
 
 impl RTTIToRustTypes {
     pub fn to_string(&self) -> String {
-        String::from(
-            match self {
-                RTTIToRustTypes::bool => "bool",
-                RTTIToRustTypes::int => "i32",
-                RTTIToRustTypes::int8 => "i8",
-                RTTIToRustTypes::int16 => "i16",
-                RTTIToRustTypes::int32 => "i32",
-                RTTIToRustTypes::int64 => "i64",
-                RTTIToRustTypes::intptr => "i64",
-                RTTIToRustTypes::uint => "u32",
-                RTTIToRustTypes::uint8 => "u8",
-                RTTIToRustTypes::uint16 => "u16",
-                RTTIToRustTypes::uint32 => "u32",
-                RTTIToRustTypes::uint64 => "u64",
-                RTTIToRustTypes::uint128 => "u128",
-                RTTIToRustTypes::uintptr => "u64",
-                RTTIToRustTypes::float => "f32",
-                RTTIToRustTypes::double => "f64",
-                RTTIToRustTypes::HalfFloat => "f32",
-                RTTIToRustTypes::tchar => "char",
-                RTTIToRustTypes::wchar => "char",
-                RTTIToRustTypes::ucs4 => "u32",
-                RTTIToRustTypes::String => "String",
-                RTTIToRustTypes::WString => "String",
-                _ => unreachable!()
-            }
-        )
+        String::from(match self {
+            RTTIToRustTypes::bool => "bool",
+            RTTIToRustTypes::int => "i32",
+            RTTIToRustTypes::int8 => "i8",
+            RTTIToRustTypes::int16 => "i16",
+            RTTIToRustTypes::int32 => "i32",
+            RTTIToRustTypes::int64 => "i64",
+            RTTIToRustTypes::intptr => "i64",
+            RTTIToRustTypes::uint => "u32",
+            RTTIToRustTypes::uint8 => "u8",
+            RTTIToRustTypes::uint16 => "u16",
+            RTTIToRustTypes::uint32 => "u32",
+            RTTIToRustTypes::uint64 => "u64",
+            RTTIToRustTypes::uint128 => "u128",
+            RTTIToRustTypes::uintptr => "u64",
+            RTTIToRustTypes::float => "f32",
+            RTTIToRustTypes::double => "f64",
+            RTTIToRustTypes::HalfFloat => "f32",
+            RTTIToRustTypes::tchar => "char",
+            RTTIToRustTypes::wchar => "char",
+            RTTIToRustTypes::ucs4 => "u32",
+            RTTIToRustTypes::String => "String",
+            RTTIToRustTypes::WString => "String",
+            _ => unreachable!(),
+        })
     }
     pub fn to_type(&self) -> Type {
         Type::new(self.to_string().as_str())
@@ -114,6 +112,7 @@ fn gen_bindings(game_id: &str) {
 
     let mut scope = Scope::new();
     let mut module = scope.new_module(game_id);
+    module.vis("pub");
 
     for (type_name, type_value) in input.as_object().unwrap() {
         let type_value = type_value.as_object().unwrap();
@@ -318,14 +317,19 @@ fn gen_class(scope: &mut Module, name: &String, value: &Map<String, Value>) {
                 }
             } else {
                 let (category_type_name, category_struct) = gen_category(name, &category, &attrs);
-                let mut field = Field::new(format!("{}_category", category).as_str().to_lowercase().as_str(), category_type_name.as_str());
+                let mut field = Field::new(
+                    format!("{}_category", category)
+                        .as_str()
+                        .to_lowercase()
+                        .as_str(),
+                    category_type_name.as_str(),
+                );
                 field.vis("pub");
                 class.push_field(field.clone());
                 category_structs.push(category_struct);
             }
         }
     }
-
 
     for category in category_structs {
         scope.push_struct(category);
@@ -348,13 +352,20 @@ fn collect_attr_categories(value: &Vec<Value>) -> HashMap<String, Vec<Map<String
             categories.insert(last_category.clone(), Vec::new());
         }
 
-        categories.get_mut(&last_category).unwrap().push(attr.clone());
+        categories
+            .get_mut(&last_category)
+            .unwrap()
+            .push(attr.clone());
     }
 
     categories
 }
 
-fn gen_category(parent_name: &String, name: &String, value: &Vec<Map<String, Value>>) -> (String, Struct) {
+fn gen_category(
+    parent_name: &String,
+    name: &String,
+    value: &Vec<Map<String, Value>>,
+) -> (String, Struct) {
     let name = format!("{}{}Category", parent_name, name);
     let mut category = Struct::new(name.as_str());
     category.derive("Debug");
@@ -371,7 +382,9 @@ fn gen_category(parent_name: &String, name: &String, value: &Vec<Map<String, Val
 }
 
 fn gen_attr_field(attr: &Map<String, Value>) -> Field {
-    let attr_type = if RTTIToRustTypes::from(&attr["type"].as_str().unwrap().to_string()) != RTTIToRustTypes::Unknown {
+    let attr_type = if RTTIToRustTypes::from(&attr["type"].as_str().unwrap().to_string())
+        != RTTIToRustTypes::Unknown
+    {
         RTTIToRustTypes::from(&attr["type"].as_str().unwrap().to_string()).to_string()
     } else {
         attr["type"].as_str().unwrap().to_string()
@@ -388,14 +401,18 @@ fn gen_attr_field(attr: &Map<String, Value>) -> Field {
     }
 
     let mut field = Field::new(name, attr_type);
-    field.doc(format!("offset: {}, flags: {}", attr["offset"], attr["flags"]));
+    field.doc(format!(
+        "offset: {}, flags: {}",
+        attr["offset"], attr["flags"]
+    ));
     field.vis("pub");
 
     field.clone()
 }
 
 fn gen_pointer(scope: &mut Module, name: &String, value: &Map<String, Value>) {
-    scope.new_struct(name)
+    scope
+        .new_struct(name)
         .generic("T")
         .vis("pub")
         .derive("Debug")
@@ -409,7 +426,11 @@ fn replace_known_primitive_args(raw: &String) -> String {
         let split = raw.split("<").collect::<Vec<_>>();
         let generic = split[1].to_string().replace(">", "");
         if RTTIToRustTypes::from(&generic) != RTTIToRustTypes::Unknown {
-            return format!("{}<{}>", split[0], RTTIToRustTypes::from(&generic).to_string());
+            return format!(
+                "{}<{}>",
+                split[0],
+                RTTIToRustTypes::from(&generic).to_string()
+            );
         }
     }
 
