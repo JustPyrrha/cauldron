@@ -1,5 +1,5 @@
 use chrono::prelude::Utc;
-use codegen::{Block, Field, Module, Scope, Struct, Type, Variant};
+use codegen::{Block, Field, Scope, Struct, Type, Variant};
 use serde_json::{Map, Value};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
@@ -111,16 +111,14 @@ fn gen_bindings(game_id: &str) {
     let input: Value = serde_json::from_str(input.as_str()).unwrap();
 
     let mut scope = Scope::new();
-    let mut module = scope.new_module(game_id);
-    module.vis("pub");
 
     for (type_name, type_value) in input.as_object().unwrap() {
         let type_value = type_value.as_object().unwrap();
         match type_value["kind"].as_str().unwrap() {
-            "primitive" => gen_primitive(&mut module, type_name, type_value),
-            "enum flags" | "enum" => gen_enum(&mut module, type_name, type_value),
-            "class" => gen_class(&mut module, type_name, type_value),
-            "pointer" | "container" => gen_pointer(&mut module, type_name, type_value),
+            "primitive" => gen_primitive(&mut scope, type_name, type_value),
+            "enum flags" | "enum" => gen_enum(&mut scope, type_name, type_value),
+            "class" => gen_class(&mut scope, type_name, type_value),
+            "pointer" | "container" => gen_pointer(&mut scope, type_name, type_value),
             _ => {}
         };
     }
@@ -142,7 +140,7 @@ fn gen_bindings(game_id: &str) {
     writeln!(file, "").unwrap();
 }
 
-fn gen_primitive(scope: &mut Module, name: &String, value: &Map<String, Value>) {
+fn gen_primitive(scope: &mut Scope, name: &String, value: &Map<String, Value>) {
     if RTTIToRustTypes::from(name) != RTTIToRustTypes::Unknown {
         return;
     }
@@ -160,7 +158,7 @@ fn gen_primitive(scope: &mut Module, name: &String, value: &Map<String, Value>) 
         .tuple_field(base_type);
 }
 
-fn gen_enum(scope: &mut Module, name: &String, value: &Map<String, Value>) {
+fn gen_enum(scope: &mut Scope, name: &String, value: &Map<String, Value>) {
     let values = value["values"].as_array().unwrap();
 
     let values = values
@@ -275,7 +273,7 @@ fn gen_enum(scope: &mut Module, name: &String, value: &Map<String, Value>) {
     from_value_fn.push_block(block);
 }
 
-fn gen_class(scope: &mut Module, name: &String, value: &Map<String, Value>) {
+fn gen_class(scope: &mut Scope, name: &String, value: &Map<String, Value>) {
     let mut category_structs = Vec::new();
     let class = scope
         .new_struct(name)
@@ -389,7 +387,7 @@ fn gen_attr_field(attr: &Map<String, Value>) -> Field {
     } else {
         attr["type"].as_str().unwrap().to_string()
     };
-    let attr_type = replace_known_primitive_args(&attr_type);
+    let attr_type = replace_primitive_generics(&attr_type);
     let attr_type = Type::new(&attr_type);
 
     let mut name = attr["name"].as_str().unwrap();
@@ -410,7 +408,7 @@ fn gen_attr_field(attr: &Map<String, Value>) -> Field {
     field.clone()
 }
 
-fn gen_pointer(scope: &mut Module, name: &String, value: &Map<String, Value>) {
+fn gen_pointer(scope: &mut Scope, name: &String, value: &Map<String, Value>) {
     scope
         .new_struct(name)
         .generic("T")
@@ -421,16 +419,23 @@ fn gen_pointer(scope: &mut Module, name: &String, value: &Map<String, Value>) {
         .field("marker", "std::marker::PhantomData<T>");
 }
 
-fn replace_known_primitive_args(raw: &String) -> String {
+/// Replaces known rust primitives ([RTTIToRustTypes]) in generics.
+fn replace_primitive_generics(raw: &String) -> String {
     if raw.contains("<") && raw.contains(">") {
         let split = raw.split("<").collect::<Vec<_>>();
-        let generic = split[1].to_string().replace(">", "");
-        if RTTIToRustTypes::from(&generic) != RTTIToRustTypes::Unknown {
-            return format!(
-                "{}<{}>",
-                split[0],
-                RTTIToRustTypes::from(&generic).to_string()
-            );
+        let generic = raw[split[0].len() + 1..raw.len() - 1].to_string();
+
+        return if split.len() > 2 {
+            // nested generic, do a lil recursion (as a treat)
+            format!("{}<{}>", split[0], replace_primitive_generics(&generic))
+        } else {
+            // only one generic left, check and replace if it has a known rust primitive replacement.
+            let last_generic = split[1].strip_suffix(">").unwrap_or(split[1]).to_string();
+            if RTTIToRustTypes::from(&last_generic) != RTTIToRustTypes::Unknown {
+                format!("{}<{}>", split[0], RTTIToRustTypes::from(&last_generic).to_string())
+            } else {
+                format!("{}<{}>", split[0], last_generic)
+            }
         }
     }
 
