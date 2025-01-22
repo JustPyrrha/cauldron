@@ -1,13 +1,8 @@
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/JustPyrrha/cauldron/build.yml?style=flat-square&logo=rust)
+[//]: # (![GitHub Actions Workflow Status]&#40;https://img.shields.io/github/actions/workflow/status/JustPyrrha/cauldron/build.yml?style=flat-square&logo=rust&#41;)
+[![Discord](https://img.shields.io/discord/1012475585605414983?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/Gt4gkMwadB)
 
 # cauldron
-A decima plugin loader.
-
-### loader plans
-- support more decima games
-- standard set of offsets for each game
-- standard hooking setup
-- overridable dependency requirements and load orders for plugins
+A Decima plugin loader.
 
 ## Credits
 - [ShadelessFox](https://github.com/ShadelessFox) - For [Decima Workshop](https://github.com/ShadelessFox/decima) and the work they've put into reverse engineering the Decima engine.
