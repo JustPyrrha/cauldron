@@ -1,12 +1,11 @@
 use crate::util;
 use crate::util::Fence;
 use egui::{Color32, ImageData, TextureId, TexturesDelta};
-use log::{error, trace, warn};
+use log::{error, warn};
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::ptr;
 use windows::core::{w, Error, Interface, Result, HRESULT};
-use windows::Win32::Graphics::Direct3D::*;
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
 
@@ -112,7 +111,7 @@ impl TextureHeap {
         self.textures
             .iter_mut()
             .enumerate()
-            .for_each(|(idx, (tid, texture))| {
+            .for_each(|(idx, (_tid, texture))| {
                 texture.gpu_desc = D3D12_GPU_DESCRIPTOR_HANDLE {
                     ptr: gpu_heap_start.ptr + (idx as u32 * heap_inc_size) as u64,
                 }

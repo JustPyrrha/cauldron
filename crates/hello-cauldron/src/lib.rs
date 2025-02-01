@@ -1,4 +1,5 @@
-use cauldron::{define_cauldron_plugin, info, CauldronLoader, CauldronPlugin};
+use cauldron::{define_cauldron_plugin, CauldronLoader, CauldronPlugin};
+use libdecima::log;
 
 pub struct HelloCauldron {}
 
@@ -8,11 +9,11 @@ impl CauldronPlugin for HelloCauldron {
     }
 
     fn on_init(&self, _loader: &CauldronLoader) {
-        info!("Hello Cauldron!");
+        log!("Hello Cauldron!");
     }
 
     fn on_deinit(&self) {
-        info!("Goodbye Cauldron!");
+        log!("Goodbye Cauldron!");
     }
 }
 

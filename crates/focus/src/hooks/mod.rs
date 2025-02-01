@@ -14,6 +14,7 @@ pub mod dx12;
 ///
 /// Registers a class and creates a window on instantiation.
 /// Destroys the window and unregisters the class on drop.
+#[allow(dead_code)]
 pub struct DummyHwnd(HWND, WNDCLASSEXW);
 
 impl Default for DummyHwnd {
@@ -62,7 +63,7 @@ impl DummyHwnd {
                 1440, //todo(py): get these at runtime
                 None,
                 None,
-                wndclass.hInstance,
+                Some(wndclass.hInstance),
                 None,
             )
             .unwrap()

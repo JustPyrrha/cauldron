@@ -1,13 +1,13 @@
 [package]
-name = "hello-cauldron"
+name = "legacy"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-description = "Blank Cauldron plugin."
+description = "Py's HFW expriments."
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 cauldron.workspace = true
-libdecima = { workspace = true, features = ["nixxes"] }
+libdecima = { workspace = true, features = ["hfw"] }

@@ -4,10 +4,10 @@ use crate::util;
 use crate::util::{drop_barrier, Fence};
 use egui::epaint::{ClippedShape, Primitive, Vertex};
 use egui::{
-    ClippedPrimitive, Context, FullOutput, ImageData, PlatformOutput, Pos2, Rgba, TextureId,
-    TexturesDelta, ViewportIdMap, ViewportOutput,
+    ClippedPrimitive, Context, FullOutput, PlatformOutput, Pos2, Rgba, TexturesDelta,
+    ViewportIdMap, ViewportOutput,
 };
-use log::{trace, warn};
+use log::warn;
 use std::mem::{offset_of, ManuallyDrop};
 use std::{mem, ptr, slice};
 use windows::core::{s, w, Interface, Result};
@@ -68,7 +68,7 @@ pub struct D3D12RenderEngine {
     command_allocator: ID3D12CommandAllocator,
     command_list: ID3D12GraphicsCommandList,
 
-    rtv_heap: ID3D12DescriptorHeap,
+    _rtv_heap: ID3D12DescriptorHeap,
     rtv_heap_start: D3D12_CPU_DESCRIPTOR_HANDLE,
     texture_heap: TextureHeap,
 
@@ -139,8 +139,8 @@ impl D3D12RenderEngine {
         let (device, command_queue, command_allocator, command_list) =
             unsafe { create_command_objects(command_queue) }?;
 
-        let (rtv_heap, texture_heap) = unsafe { create_heaps(&device) }?;
-        let rtv_heap_start = unsafe { rtv_heap.GetCPUDescriptorHandleForHeapStart() };
+        let (_rtv_heap, texture_heap) = unsafe { create_heaps(&device) }?;
+        let rtv_heap_start = unsafe { _rtv_heap.GetCPUDescriptorHandleForHeapStart() };
 
         let (root_signature, pipeline_state) = unsafe { create_shader_program(&device) }?;
 
@@ -154,7 +154,7 @@ impl D3D12RenderEngine {
             command_queue,
             command_allocator,
             command_list,
-            rtv_heap,
+            _rtv_heap,
             rtv_heap_start,
             texture_heap,
             root_signature,
@@ -439,8 +439,7 @@ unsafe fn create_shader_program(
       output.color = input.color;
 
       return output;
-    }
-    "#;
+    }"#;
 
     const PS: &str = r#"
     struct vs_out {

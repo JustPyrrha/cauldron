@@ -78,6 +78,7 @@ impl MH_STATUS {
 
 /// Structure that holds original address, hook function address, and trampoline
 /// address for a given hook.
+#[derive(Debug)]
 pub struct MhHook {
     addr: *mut c_void,
     hook_impl: *mut c_void,

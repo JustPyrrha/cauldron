@@ -1,0 +1,13 @@
+schema_version = 0
+
+[cauldron]
+id = "legacy"
+version = "0.1.0-alpha"
+
+[cauldron.metadata]
+name = "The Legacy"
+description = "That which is lost or forbidden. Py's HFW expriments."
+contributors = [ "JustPyrrha" ]
+
+[cauldron.dependencies]
+hfw = "*" # Horizon Forbidden West

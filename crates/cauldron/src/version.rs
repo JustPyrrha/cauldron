@@ -69,7 +69,7 @@ pub fn version() -> GameVersion {
     unsafe {
         GetFileVersionInfoW(
             PCWSTR::from_raw(HSTRING::from(path.as_path()).as_ptr()),
-            0,
+            None,
             version_info_size,
             version_info_buf.as_mut_ptr() as _,
         )

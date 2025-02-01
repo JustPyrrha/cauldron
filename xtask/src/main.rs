@@ -50,7 +50,12 @@ fn hfw_task() -> Result<(), DynError> {
         debug_out.join("cauldron.pdb"),
     ];
     let pulse_outputs = vec![debug_out.join("pulse.dll"), debug_out.join("pulse.pdb")];
-    let plugin_outputs = vec![debug_out.join("hello_cauldron.dll")];
+    let plugin_outputs = vec![
+        debug_out.join("legacy.dll"),
+        debug_out.join("legacy.pdb"),
+        debug_out.join("hello_cauldron.dll"),
+        debug_out.join("hello_cauldron.pdb"),
+    ];
 
     if !&pulse_dir.exists() {
         fs::create_dir_all(&pulse_dir)?;

@@ -1,7 +1,7 @@
 #![feature(once_cell_try)]
+#![allow(static_mut_refs)]
 
 use crate::renderer::msg_filter::MessageFilter;
-use crate::renderer::RenderEngine;
 use egui::RawInput;
 use minhook::{MH_ApplyQueued, MH_Initialize, MH_Uninitialize, MhHook, MH_STATUS};
 use std::cell::OnceCell;
@@ -11,7 +11,6 @@ pub mod hooks;
 pub mod renderer;
 pub mod util;
 
-static mut MODULE: OnceCell<isize> = OnceCell::new();
 static mut SUNWING: OnceCell<Focus> = OnceCell::new();
 
 pub trait EguiRenderLoop {

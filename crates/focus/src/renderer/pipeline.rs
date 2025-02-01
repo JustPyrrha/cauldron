@@ -1,11 +1,10 @@
-use crate::renderer::backend::dx12;
 use crate::renderer::backend::dx12::{split_output, D3D12RenderEngine};
 use crate::renderer::input::{collect_input, process_input};
 use crate::renderer::msg_filter::MessageFilter;
 use crate::renderer::RenderEngine;
 use crate::EguiRenderLoop;
 use egui::{Context, Event, RawInput};
-use log::{debug, error, trace};
+use log::error;
 use once_cell::unsync::Lazy;
 use parking_lot::Mutex;
 use std::cell::OnceCell;
@@ -14,13 +13,13 @@ use std::ffi::c_void;
 use std::mem;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{atomic, Arc};
+use std::sync::Arc;
 use std::time::Instant;
 use windows::core::{Error, Result};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, SetWindowLongPtrW, GWLP_USERDATA, GWLP_WNDPROC,
+    CallWindowProcW, DefWindowProcW, SetWindowLongPtrW, GWLP_WNDPROC,
 };
 
 type RenderLoop = Box<dyn EguiRenderLoop + Send + Sync>;
@@ -52,7 +51,7 @@ pub(crate) struct Pipeline {
     rx: Receiver<PipelineMessage>,
     shared_state: Arc<PipelineSharedState>,
     queue_buffer: OnceCell<Vec<PipelineMessage>>,
-    start_of_first_frame: OnceCell<Instant>,
+    _start_of_first_frame: OnceCell<Instant>,
     pub(crate) egui_events: Mutex<Vec<Event>>,
 }
 
@@ -60,7 +59,7 @@ impl Pipeline {
     pub(crate) fn new(
         hwnd: isize,
         mut ctx: Context,
-        mut engine: D3D12RenderEngine,
+        engine: D3D12RenderEngine,
         mut render_loop: RenderLoop,
     ) -> std::result::Result<Self, (Error, RenderLoop)> {
         egui_extras::install_image_loaders(&mut ctx);
@@ -92,7 +91,7 @@ impl Pipeline {
             rx,
             shared_state: Arc::clone(&shared_state),
             queue_buffer,
-            start_of_first_frame: OnceCell::new(),
+            _start_of_first_frame: OnceCell::new(),
             egui_events: Mutex::new(Vec::new()),
         })
     }

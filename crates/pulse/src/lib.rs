@@ -1,27 +1,29 @@
-#![feature(decl_macro)]
-#![feature(extern_types)]
-
-mod ida;
-mod memory;
-mod types;
+#![allow(static_mut_refs)]
+#![feature(c_variadic)]
+#![feature(core_intrinsics)]
 
 mod json;
-pub mod p_core;
 
-use crate::ida::export_ida_type;
-use crate::json::export_types_json;
-use crate::memory::{
-    find_offset_from, find_pattern, get_data_section, get_module, get_rdata_section,
-};
-use crate::p_core::array::GGArray;
-use crate::types::{
-    as_compound, as_container, as_enum, as_pointer, as_primitive, rtti_display_name, rtti_name,
-    ExportedSymbolsGroup, RTTIContainerData, RTTIKind, RTTIPointerData, RTTI,
-};
-use cauldron::{debug, define_cauldron_plugin, info, CauldronLoader, CauldronPlugin};
-use std::ffi::{c_void, CStr};
-use std::fs::File;
+use cauldron::{define_cauldron_plugin, CauldronLoader, CauldronPlugin};
+use libdecima::log;
+use libdecima::mem::offsets::Offsets;
+use libdecima::mem::{get_data_section, get_rdata_section, offset_from_instruction};
+use libdecima::types::nixxes::log::NxLogImpl;
+use libdecima::types::rtti::{as_atom, as_compound, as_container, as_pointer, RTTI};
+use minhook::MhHook;
+use once_cell::sync::OnceCell;
+use std::ffi::{c_char, c_void, VaList};
+use std::fs::{File, OpenOptions};
 use std::slice;
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_F5, VK_F6};
+
+static RTTI_FACTORY_REGISTER_TYPE: OnceCell<
+    unsafe fn(factory: *mut c_void, rtti: *const RTTI) -> bool,
+> = OnceCell::new();
+
+static NX_LOG_IMPL_FN_LOG: OnceCell<FnNxLogImplLog> = OnceCell::new();
+
+static mut FOUND_TYPES: OnceCell<Vec<*const RTTI>> = OnceCell::new();
 
 pub struct PulsePlugin {}
 
@@ -31,118 +33,39 @@ impl CauldronPlugin for PulsePlugin {
     }
 
     fn on_init(&self, _loader: &CauldronLoader) {
-        info!("pulse: scanning for rtti structures...");
-        let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
-        let (rdata_start, rdata_end) = get_rdata_section().unwrap_or((0, 0));
+        // todo: rewrite when im more awake
 
-        let is_valid_ptr = |ptr: usize| {
-            if ptr == 0 {
-                false
-            } else {
-                (ptr >= data_start && ptr < data_end) || (ptr >= rdata_start && ptr < rdata_end)
-            }
-        };
-
-        let mut types: Vec<*const RTTI> = Vec::new();
-
-        let mut current: *const c_void = data_start as *const c_void;
-        loop {
-            let rtti_ptr = find_pattern(current as *const u8, data_end, "FF FF FF FF [00000???]");
-            let Some(rtti_ptr) = rtti_ptr else {
-                break;
-            };
-
-            current = unsafe { rtti_ptr.add(5) };
-            let rtti = unsafe { &*(rtti_ptr as *const RTTI) };
-            unsafe {
-                if let Some(primitive) = as_primitive(rtti) {
-                    let primitive = &*primitive;
-                    if primitive.size == 0
-                        || primitive.alignment == 0
-                        || (!primitive.constructor.is_null()
-                            && !is_valid_ptr(primitive.constructor as usize))
-                        || (!primitive.destructor.is_null()
-                            && !is_valid_ptr(primitive.destructor as usize))
-                        || !is_valid_ptr(primitive.base_type as usize)
-                        || !is_valid_ptr(primitive.name as usize)
-                    {
-                        continue;
-                    }
-                } else if let Some(enum_) = as_enum(rtti) {
-                    let enum_ = &*enum_;
-                    if enum_.size == 0
-                        || !is_valid_ptr(enum_.name as usize)
-                        || !is_valid_ptr(enum_.values as usize)
-                    {
-                        continue;
-                    }
-                } else if let Some(container) = as_container(rtti) {
-                    let container = &*container;
-                    if !is_valid_ptr(container.item_type as usize)
-                        || !is_valid_ptr(container.container_type as usize)
-                        || !is_valid_ptr((&*container.container_type).name as usize)
-                        || (!(&*container.container_type).constructor.is_null()
-                            && !is_valid_ptr((&*container.container_type).constructor as usize))
-                        || (!(&*container.container_type).destructor.is_null()
-                            && !is_valid_ptr((&*container.container_type).destructor as usize))
-                    {
-                        continue;
-                    }
-                } else if let Some(pointer) = as_pointer(rtti) {
-                    let pointer = &*pointer;
-                    if !is_valid_ptr(pointer.item_type as usize)
-                        || !is_valid_ptr(pointer.pointer_type as usize)
-                        || !is_valid_ptr((&*pointer.pointer_type).name as usize)
-                        || (!(&*pointer.pointer_type).constructor.is_null()
-                            && !is_valid_ptr((&*pointer.pointer_type).constructor as usize))
-                        || (!(&*pointer.pointer_type).destructor.is_null()
-                            && !is_valid_ptr((&*pointer.pointer_type).destructor as usize))
-                    {
-                        continue;
-                    }
-                } else if let Some(compound) = as_compound(rtti) {
-                    let compound = &*compound;
-                    if !is_valid_ptr(compound.name as usize)
-                        || (compound.num_bases > 0 && !is_valid_ptr(compound.bases as usize))
-                        || (compound.num_attributes > 0
-                            && !is_valid_ptr(compound.attributes as usize))
-                        || (compound.num_message_handlers > 0
-                            && !is_valid_ptr(compound.message_handlers as usize))
-                    {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-
-                scan_recursively(rtti, &mut types);
-            }
-        }
-
-        info!("pulse: scan finished, found {}. exporting...", types.len());
-        export_types_json(&types);
-        // info!("pulse: exporting symbols");
-        // export_symbols();
-        // info!("pulse: symbols exported");
-        {
-            use std::io::Write;
-            info!("pulse: exporting types for ida...");
-            let mut ida_file = File::create("hfw_ggrtti.idc").unwrap();
-            let mut existing_containers = Vec::<*mut RTTIContainerData>::new();
-            let mut existing_pointers = Vec::<*mut RTTIPointerData>::new();
-            writeln!(ida_file, "#include <idc.idc>\n\nstatic main() {{").unwrap();
-            types.iter().for_each(|rtti| unsafe {
-                export_ida_type(
-                    *rtti,
-                    &mut ida_file,
-                    &mut existing_containers,
-                    &mut existing_pointers,
-                )
-                .unwrap();
-            });
-            writeln!(ida_file, "}}").unwrap();
-        }
-        info!("pulse: done");
+        // Offsets::instance().setup();
+        //
+        // let register_type = unsafe {
+        //     MhHook::new(
+        //         *Offsets::instance()
+        //             .resolve("RTTIFactory::RegisterType")
+        //             .unwrap() as *mut _,
+        //         rtti_factory_register_type_impl as *mut _,
+        //     )
+        //     .unwrap()
+        // };
+        // unsafe {
+        //     RTTI_FACTORY_REGISTER_TYPE
+        //         .set(std::mem::transmute(register_type.trampoline()))
+        //         .unwrap();
+        // }
+        //
+        // log!("scanning for rtti structures...");
+        //
+        // unsafe {
+        //     FOUND_TYPES.get_or_init(|| Vec::new());
+        //     FOUND_TYPES
+        //         .get_mut()
+        //         .unwrap()
+        //         .append(&mut scan_memory_for_types());
+        // }
+        //
+        // log!(format!("scan finished, found {} in-memory types.", unsafe {
+        //     FOUND_TYPES.get().unwrap().len()
+        // })
+        // .as_str());
     }
 }
 
@@ -150,6 +73,144 @@ unsafe impl Sync for PulsePlugin {}
 unsafe impl Send for PulsePlugin {}
 
 define_cauldron_plugin!(PulsePlugin, include_str!("../pulse.cauldron.toml"));
+
+type FnNxLogImplLog = unsafe extern "C" fn(
+    instance: *mut NxLogImpl,
+    category: *const c_char,
+    format: *const c_char,
+    format_args: VaList,
+);
+
+static LOGGED: OnceCell<bool> = OnceCell::new();
+unsafe fn nx__nx_log_impl__fn_log_impl(
+    instance: *mut NxLogImpl,
+    category: *const c_char,
+    format: *const c_char,
+    format_args: VaList,
+) {
+    std::intrinsics::breakpoint();
+
+    LOGGED.get_or_init(|| {
+        // shitty call once lol
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open("instance.log")
+            .unwrap();
+        use std::io::Write as _;
+        writeln!(file, "{:p}", instance).unwrap();
+
+        true
+    });
+
+    (NX_LOG_IMPL_FN_LOG.get().unwrap())(instance, category, format, format_args)
+}
+
+unsafe fn rtti_factory_register_type_impl(factory: *mut c_void, rtti: *const RTTI) -> bool {
+    let result = (RTTI_FACTORY_REGISTER_TYPE.get().unwrap())(factory, rtti);
+
+    if result {
+        scan_recursively(rtti, unsafe { FOUND_TYPES.get_mut().unwrap() });
+    }
+
+    result
+}
+
+unsafe fn scan_memory_for_types() -> Vec<*const RTTI> {
+    vec![]
+
+    // todo: rewrite pattern16 pattern
+
+    // let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
+    // let (rdata_start, rdata_end) = get_rdata_section().unwrap_or((0, 0));
+    //
+    // let is_valid_ptr = |ptr: usize| {
+    //     if ptr == 0 {
+    //         false
+    //     } else {
+    //         (ptr >= data_start && ptr < data_end) || (ptr >= rdata_start && ptr < rdata_end)
+    //     }
+    // };
+    //
+    // let mut types: Vec<*const RTTI> = Vec::new();
+    //
+    // let mut current: *const c_void = data_start as *const c_void;
+    // loop {
+    //     let rtti_ptr = find_pattern(current as *const u8, data_end, "FF FF FF FF [00000???]");
+    //     let Some(rtti_ptr) = rtti_ptr else {
+    //         break;
+    //     };
+    //
+    //     current = unsafe { rtti_ptr.add(5) };
+    //     let rtti = unsafe { &*(rtti_ptr as *const RTTI) };
+    //     if let Some(primitive) = as_atom(rtti) {
+    //         let primitive = &*primitive;
+    //         if primitive.size == 0
+    //             || primitive.alignment == 0
+    //             || (!primitive.fn_constructor.is_null()
+    //                 && !is_valid_ptr(primitive.fn_constructor as usize))
+    //             || (!primitive.fn_destructor.is_null()
+    //                 && !is_valid_ptr(primitive.fn_destructor as usize))
+    //             || !is_valid_ptr(primitive.parent_type as usize)
+    //             || !is_valid_ptr(primitive.type_name as usize)
+    //         {
+    //             continue;
+    //         }
+    //     } else if let Some(enum_) = as_enum(rtti) {
+    //         let enum_ = &*enum_;
+    //         if enum_.size == 0
+    //             || !is_valid_ptr(enum_.type_name as usize)
+    //             || !is_valid_ptr(enum_.values as usize)
+    //         {
+    //             continue;
+    //         }
+    //     } else if let Some(container) = as_container(rtti) {
+    //         let container = &*container;
+    //         if !is_valid_ptr(container.item_type as usize)
+    //             || !is_valid_ptr(container.container_type as usize)
+    //             || !is_valid_ptr((&*container.container_type).type_name as usize)
+    //             || (!(&*container.container_type).fn_constructor.is_null()
+    //                 && !is_valid_ptr((&*container.container_type).fn_constructor as usize))
+    //             || (!(&*container.container_type).fn_destructor.is_null()
+    //                 && !is_valid_ptr((&*container.container_type).fn_destructor as usize))
+    //         {
+    //             continue;
+    //         }
+    //     } else if let Some(pointer) = as_pointer(rtti) {
+    //         let pointer = &*pointer;
+    //         if !is_valid_ptr(pointer.item_type as usize)
+    //             || !is_valid_ptr(pointer.pointer_type as usize)
+    //             || !is_valid_ptr((&*pointer.pointer_type).type_name as usize)
+    //             || !is_valid_ptr(pointer.type_name as usize)
+    //             || (!(&*pointer.pointer_type).fn_constructor.is_null()
+    //                 && !is_valid_ptr((&*pointer.pointer_type).fn_constructor as usize))
+    //             || (!(&*pointer.pointer_type).fn_destructor.is_null()
+    //                 && !is_valid_ptr((&*pointer.pointer_type).fn_destructor as usize))
+    //         {
+    //             continue;
+    //         }
+    //     } else if let Some(compound) = as_compound(rtti) {
+    //         let compound = &*compound;
+    //         if !is_valid_ptr(compound.type_name as usize)
+    //             || (compound.num_bases > 0 && !is_valid_ptr(compound.bases as usize))
+    //             || (compound.num_attrs > 0 && !is_valid_ptr(compound.attrs as usize))
+    //             || (compound.num_message_handlers > 0
+    //                 && !is_valid_ptr(compound.message_handlers as usize))
+    //             || (compound.num_ordered_attrs > 0
+    //                 && !is_valid_ptr(compound.ordered_attrs as usize))
+    //         {
+    //             continue;
+    //         }
+    //     } else {
+    //         continue;
+    //     }
+    //
+    //     scan_recursively(rtti, &mut types);
+    // }
+    //
+    // types
+}
 
 unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
     if rtti.is_null() || types.contains(&rtti) {
@@ -163,94 +224,18 @@ unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>) {
     }
     if let Some(pointer) = as_pointer(rtti) {
         scan_recursively((*pointer).item_type, types);
-    } else if let Some(primitive) = as_primitive(rtti) {
-        scan_recursively((*primitive).base_type, types);
+    } else if let Some(primitive) = as_atom(rtti) {
+        scan_recursively(std::mem::transmute((*primitive).parent_type), types);
     } else if let Some(compound) = as_compound(rtti) {
         let compound = &*compound;
         for base in compound.bases() {
-            scan_recursively(base.base, types);
+            scan_recursively(std::mem::transmute(base.r#type), types);
         }
         for attr in compound.attributes() {
-            scan_recursively(attr.base, types);
+            scan_recursively(attr.r#type, types);
         }
         for msg_handler in compound.message_handlers() {
             scan_recursively(msg_handler.message, types);
-        }
-    }
-}
-
-fn export_symbols() {
-    let groups_offset = find_offset_from(
-        "48 8B 3D ? ? ? ? 48 63 05 ? ? ? ? 48 8D 2C C7 48 3B FD 74 45 48 8B",
-        3,
-    )
-    .unwrap()
-        - 8usize;
-    let groups_ptr = get_module().unwrap().0 + groups_offset;
-    let groups: *mut GGArray<*mut ExportedSymbolsGroup> =
-        unsafe { std::mem::transmute(groups_ptr) };
-    let mut file = File::create("symbols.txt").unwrap();
-    for group in unsafe { (*groups).slice() } {
-        let group = unsafe { &**group };
-        export_symbol(group, &mut file);
-    }
-}
-
-fn export_symbol<W: std::io::Write>(group: &ExportedSymbolsGroup, file: &mut W) {
-    let group_name = unsafe { rtti_name(group.get_rtti()) };
-    if group.always_export {
-        writeln!(file, "{}: (always exported)", group_name).unwrap();
-    } else {
-        writeln!(file, "{}:", group_name).unwrap();
-    }
-    if !group.members.is_empty() {
-        writeln!(file, "\tmembers: ({})", group.members.count).unwrap();
-        for member in group.members.slice() {
-            writeln!(
-                file,
-                "\t\t{} - {} ({})",
-                member.name(),
-                member.namespace(),
-                member.kind
-            )
-            .unwrap();
-            writeln!(file, "\t\t\tunk20: {:p}", member.unknown_20).unwrap();
-            writeln!(file, "\t\t\tunk28: {:p}", member.unknown_28).unwrap();
-
-            writeln!(file, "\t\t\tlanguage: ").unwrap();
-            for language in &member.language_info {
-                if language.name.is_null() {
-                    debug!("nullptr lang: {:?}", language);
-                    break;
-                }
-                writeln!(file, "\t\t\t\t{}:", language.name()).unwrap();
-                writeln!(file, "\t\t\t\t\tunk10: {:p}", language.unknown_10).unwrap();
-                writeln!(file, "\t\t\t\t\tunk10: {:p}", language.unknown_18).unwrap();
-                writeln!(file, "\t\t\t\t\tunk30: {:p}", language.unknown_30).unwrap();
-                writeln!(file, "\t\t\t\t\tunk38: {:p}", language.unknown_38).unwrap();
-                writeln!(file, "\t\t\t\t\tunk40: {:p}", language.unknown_40).unwrap();
-                writeln!(file, "\t\t\t\t\tunk48: {:p}", language.unknown_48).unwrap();
-                writeln!(file, "\t\t\t\t\tunk50: {:p}", language.unknown_50).unwrap();
-                writeln!(file, "\t\t\t\t\tunk58: {:p}", language.unknown_58).unwrap();
-                writeln!(file, "\t\t\t\t\tunk60: {:p}", language.unknown_60).unwrap();
-                writeln!(file, "\t\t\t\t\tunk68: {:p}", language.unknown_68).unwrap();
-
-                writeln!(file, "\t\t\t\t\tsignature:").unwrap();
-                for part in language.signature.slice() {
-                    writeln!(file, "\t\t\t\t\t\t{}:", part.name()).unwrap();
-                    writeln!(file, "\t\t\t\t\t\t\tmodifiers: {}", part.modifiers()).unwrap();
-                    writeln!(file, "\t\t\t\t\t\t\tunk10: {:p}", part.unknown_10).unwrap();
-                    writeln!(file, "\t\t\t\t\t\t\tunk18: {:p}", part.unknown_18).unwrap();
-                    writeln!(file, "\t\t\t\t\t\t\tunk20: {}", part.unknown_20).unwrap();
-                }
-            }
-        }
-    }
-    if !group.dependencies.is_empty() {
-        writeln!(file, "\tdependencies: ({})", group.dependencies.count).unwrap();
-        for dep in group.dependencies.slice() {
-            let name = unsafe { rtti_name(*dep) };
-            writeln!(file, "\t\t{} ({})", name, unsafe { (*(*dep)).kind }).unwrap();
         }
     }
 }

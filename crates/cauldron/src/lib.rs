@@ -1,8 +1,7 @@
 #![feature(fn_traits)]
-#![doc = include_str!("../README.md")]
 #![allow(clippy::missing_safety_doc)]
-
-mod core_ui;
+#![allow(static_mut_refs)]
+#![doc = include_str!("../README.md")]
 
 pub mod config;
 pub mod metadata;
@@ -15,16 +14,22 @@ use crate::metadata::{
 };
 use crate::util::message_box;
 use crate::version::{CauldronGameType, GameVersion};
-use egui::Key;
+use libdecima::mem::offsets::Offsets;
+use libdecima::types::nixxes::log::NxLogImpl;
+use libdecima::types::rtti::cstr_to_string;
+use log::{error, info};
+use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MhHook, MH_STATUS};
+use once_cell::sync::OnceCell;
 use semver::{Version, VersionReq};
 use simplelog::{ColorChoice, Config, SharedLogger, TerminalMode};
-use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env::{current_dir, current_exe};
-use std::fs;
+use std::ffi::c_char;
 use std::fs::File;
 use std::path::PathBuf;
+use std::{fs, slice};
+use windows::core::{HSTRING, PCWSTR};
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK};
 use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
 
@@ -51,6 +56,7 @@ pub struct GameInfo {
 
 pub struct CauldronLoader {
     pub plugins: Vec<PluginContainer>,
+    pub hooks: Vec<MhHook>,
     pub game: GameInfo,
 }
 
@@ -58,6 +64,7 @@ impl CauldronLoader {
     pub fn new() -> Self {
         CauldronLoader {
             plugins: Vec::new(),
+            hooks: Vec::new(), // todo: maybe move this to [PluginContainer]?
             game: GameInfo {
                 game_type: CauldronGameType::find_from_exe().unwrap(),
                 version: version::version(),
@@ -301,7 +308,7 @@ impl CauldronLoader {
         }
     }
 
-    fn do_plugin_init(&self) {
+    fn do_plugin_init(&mut self) {
         let mut table = tabled::builder::Builder::new();
         table.push_record(["Order", "Id", "Version", "Name", "Description", "Authors"]);
         self.plugins.iter().enumerate().for_each(|(index, plugin)| {
@@ -346,9 +353,25 @@ impl CauldronLoader {
         );
 
         info!("cauldron: initializing plugins...");
+        match unsafe { MH_Initialize() } {
+            MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
+            status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
+            _ => unreachable!(),
+        }
+
         self.plugins.iter().for_each(|plugin| {
             plugin.plugin.on_init(&self);
         });
+
+        unsafe {
+            // enable all
+            MH_EnableHook(std::ptr::null_mut())
+                .ok()
+                .expect("cauldron: failed to queue enable hooks");
+            MH_ApplyQueued()
+                .ok()
+                .expect("cauldron: failed to apply queued hooks");
+        };
         info!("cauldron: plugins initialized.");
     }
 }
@@ -373,35 +396,21 @@ macro_rules! define_cauldron_plugin {
     };
 }
 
-pub mod log {
-    #[macro_export]
-    macro_rules! trace {
-        ($($arg:tt)+) => (::log::log!(::log::Level::Trace, $($arg)+))
-    }
-
-    #[macro_export]
-    macro_rules! debug {
-        ($($arg:tt)+) => (::log::log!(::log::Level::Debug, $($arg)+))
-    }
-
-    #[macro_export]
-    macro_rules! error {
-        ($($arg:tt)+) => (::log::log!(::log::Level::Error, $($arg)+))
-    }
-
-    #[macro_export]
-    macro_rules! warn {
-        ($($arg:tt)+) => (::log::log!(::log::Level::Warn, $($arg)+))
-    }
-
-    #[macro_export]
-    macro_rules! info {
-        ($($arg:tt)+) => (::log::log!(::log::Level::Info, $($arg)+))
-    }
-}
-
 #[doc(hidden)]
 static mut INSTANCE: OnceCell<CauldronLoader> = OnceCell::new();
+
+#[doc(hidden)]
+#[cfg(feature = "nixxes")]
+static NIXXES_PRINTLN: OnceCell<unsafe extern "C" fn(*mut NxLogImpl, *const c_char)> =
+    OnceCell::new();
+
+#[cfg(feature = "nixxes")]
+unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
+    // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
+    info!("{}", cstr_to_string(text).split_at(26).1);
+
+    (NIXXES_PRINTLN.get().unwrap())(this, text)
+}
 
 #[doc(hidden)]
 pub unsafe fn handle_dll_attach() {
@@ -426,6 +435,47 @@ pub unsafe fn handle_dll_attach() {
         File::create(config.logging.file_path).unwrap(),
     ));
     simplelog::CombinedLogger::init(loggers).unwrap();
+
+    #[cfg(feature = "nixxes")]
+    {
+        Offsets::instance().setup();
+        let log_ptr = unsafe {
+            *Offsets::instance()
+                .resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
+                .unwrap()
+        };
+        let instance = unsafe { &*log_ptr };
+        let vftable = &unsafe { slice::from_raw_parts(instance.vftable, 1) }[0];
+
+        match unsafe { MH_Initialize() } {
+            MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
+            status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
+            _ => unreachable!(),
+        }
+
+        let nxlogimpl_println = unsafe {
+            MhHook::new(
+                vftable.fn_println as *mut _,
+                nxlogimpl_println_impl as *mut _,
+            )
+            .unwrap()
+        };
+
+        unsafe {
+            NIXXES_PRINTLN
+                .set(std::mem::transmute(nxlogimpl_println.trampoline()))
+                .unwrap();
+        }
+        unsafe {
+            // enable all
+            MH_EnableHook(std::ptr::null_mut())
+                .ok()
+                .expect("cauldron: failed to queue enable hooks");
+            MH_ApplyQueued()
+                .ok()
+                .expect("cauldron: failed to apply queued hooks");
+        };
+    }
 
     info!("cauldron: starting v{}...", env!("CARGO_PKG_VERSION"));
 
@@ -458,24 +508,4 @@ pub unsafe fn handle_dll_attach() {
 
         instance
     });
-
-    if config.ui.enabled {
-        if config.ui.enable_dx12_debug {
-            focus::util::enable_debug_interface(config.ui.enable_dx12_debug_gpu_validation);
-        }
-        focus::Focus::builder()
-            .with::<focus::hooks::dx12::Dx12Hooks>(core_ui::CauldronUI::new(
-                INSTANCE
-                    .get()
-                    .unwrap()
-                    .plugins
-                    .iter()
-                    .map(|p| p.metadata.clone())
-                    .collect::<Vec<_>>(),
-                Key::from_name(config.ui.key.as_str()).expect("cauldron: failed to parse ui key"),
-            ))
-            .build()
-            .apply()
-            .unwrap();
-    }
 }

@@ -270,7 +270,7 @@ fn get_key(wparam: usize) -> Option<Key> {
 
 fn get_clipboard_text() -> Option<String> {
     unsafe {
-        if OpenClipboard(HWND::default()).is_ok() {
+        if OpenClipboard(None).is_ok() {
             let txt = GetClipboardData(CF_TEXT.0 as u32)
                 .expect("GetClipboardData")
                 .0 as *const i8;

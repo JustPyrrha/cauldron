@@ -16,3 +16,9 @@ this is just my (py's) random thoughts and notes
 ├── game.exe
 └── ...
 ```
+
+## todos
+- replace focus with a nx dxgi hook
+  - investigate putting on a toggle for nixxes games
+- investigate why closing the game panics
+  - probably forgot to free something like a dumbass
