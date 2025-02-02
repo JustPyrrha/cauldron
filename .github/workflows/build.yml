@@ -17,11 +17,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Add x86_64-pc-windows-msvc Target
-        run: rustup target add x86_64-pc-windows-msvc
+      - name: Install Nightly
+        run: rustup toolchain install nightly --profile minimal
       - name: Cache
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Add x86_64-pc-windows-msvc Target
+        run: rustup target add x86_64-pc-windows-msvc
       - name: Build
         run: cargo build --verbose
