@@ -18,7 +18,7 @@ jobs:
         with:
           submodules: true
       - name: Add x86_64-pc-windows-msvc Target
-        run: rustup target add x86_64-pc-windows-msvc --profile minimal
+        run: rustup target add x86_64-pc-windows-msvc
       - name: Cache
         uses: Swatinem/rust-cache@v2
         with:
