@@ -479,10 +479,9 @@ pub unsafe fn handle_dll_attach() {
 
     #[cfg(feature = "nixxes")]
     {
-        Offsets::instance().setup();
+        Offsets::setup();
         let log_ptr = unsafe {
-            *Offsets::instance()
-                .resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
+            *Offsets::resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
                 .unwrap()
         };
         let instance = unsafe { &*log_ptr };

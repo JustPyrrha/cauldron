@@ -55,10 +55,9 @@ pub mod log {
     use std::slice;
 
     pub fn log(category: &str, text: &str) {
-        Offsets::instance().setup();
+        Offsets::setup();
         let log_ptr = unsafe {
-            *Offsets::instance()
-                .resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
+            *Offsets::resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
                 .unwrap()
         };
         let instance = unsafe { &*log_ptr };
