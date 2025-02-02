@@ -8,7 +8,6 @@ members = [
     "crates/legacy",
     "crates/libdecima",
     "crates/minhook",
-    "crates/pattern16",
     "crates/pulse",
     "crates/version-shim",
     "xtask",
@@ -24,7 +23,6 @@ authors = ["Pyrrha Wills <pyrrha.social@gmail.com>"]
 cauldron = { version = "0.1.0-alpha", path = "crates/cauldron" }
 libdecima = { version = "0.1.0-alpha", path = "crates/libdecima" }
 minhook = { version = "1.0.0", path = "crates/minhook" }
-pattern16 = { version = "1.0.0", path = "crates/pattern16" }
 
 cc = "1.2.3"
 libc = "0.2.168"
