@@ -46,8 +46,11 @@ impl Offsets {
         {
             self.map_address(
                 "nx::NxLogImpl::Instance",
-                offset_from_instruction("48 8B 1D ? ? ? ? 48 8B 03 48 8B 78 48 48 8B 0D ? ? ? ?", 3)
-                    .unwrap() as *const u8,
+                offset_from_instruction(
+                    "48 8B 1D ? ? ? ? 48 8B 03 48 8B 78 48 48 8B 0D ? ? ? ?",
+                    3,
+                )
+                .unwrap(),
             );
             self.map_pattern(
                 "nx::NxLogImpl::fn_log",

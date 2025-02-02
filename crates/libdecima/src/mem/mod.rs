@@ -1,6 +1,5 @@
 pub mod offsets;
 
-use std::fs::OpenOptions;
 use std::slice;
 use windows::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -61,14 +60,14 @@ pub fn find_pattern(
     Ok((start_address as usize + result) as *mut u8)
 }
 
-pub fn offset_from_instruction(signature: &str, add: u32) -> Result<usize, PatternSearchError> {
+pub fn offset_from_instruction(signature: &str, add: u32) -> Result<*const u8, PatternSearchError> {
     let (module_base, module_end) = get_module()?;
     let addr = find_pattern(module_base as *mut u8, module_end - module_base, signature)?;
     let rel_offset = unsafe {
         let ptr = addr.add(add as usize) as *const i32;
         *ptr + size_of::<i32>() as i32
     };
-    Ok(addr as usize + add as usize + rel_offset as usize - module_base)
+    Ok((addr as usize + add as usize + rel_offset as usize - module_base) as *const u8)
 }
 
 pub fn get_module() -> Result<(usize, usize), PatternSearchError> {
