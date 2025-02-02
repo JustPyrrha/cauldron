@@ -1,4 +1,4 @@
-[//]: # (![GitHub Actions Workflow Status]&#40;https://img.shields.io/github/actions/workflow/status/JustPyrrha/cauldron/build.yml?style=flat-square&logo=rust&#41;)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/JustPyrrha/cauldron/build.yml?style=flat-square&logo=rust)
 [![Discord](https://img.shields.io/discord/1012475585605414983?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/Gt4gkMwadB)
 
 # cauldron
