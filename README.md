@@ -2,7 +2,7 @@
 [![Discord](https://img.shields.io/discord/1012475585605414983?style=flat-square&logo=discord&logoColor=%23cad3f5&labelColor=%23363a4f&color=%238aadf4)](https://discord.gg/Gt4gkMwadB)
 
 # cauldron
-A Decima plugin loader.
+A Decima mod loader.
 
 ## Credits
 - [ShadelessFox](https://github.com/ShadelessFox) - For [Decima Workshop](https://github.com/ShadelessFox/decima) and the work they've put into reverse engineering the Decima engine.
