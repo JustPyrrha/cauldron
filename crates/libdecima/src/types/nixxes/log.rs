@@ -1,38 +1,33 @@
+use crate::with_vftable;
 use std::ffi::{c_char, c_void};
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Threading::CRITICAL_SECTION;
 
-#[derive(Debug)]
-#[repr(C)]
-pub struct NxLogImplVftable {
-    pub fn_destructor: extern "C" fn(),
-    pub fn_constructor: extern "C" fn(),
-    pub fn_unk_24: extern "C" fn(instance: *mut NxLogImpl),
-    pub fn_alloc_console: extern "C" fn(instance: *mut NxLogImpl),
-    pub fn_free_console: extern "C" fn(instance: *mut NxLogImpl),
-    pub fn_unk_48: extern "C" fn(),
-    pub fn_unk_56: extern "C" fn(),
-    pub fn_print: extern "C" fn(),
-    pub fn_println: extern "C" fn(),
-    pub fn_log:
-        extern "C" fn(instance: *mut NxLogImpl, category: *const c_char, format: *const c_char),
-    pub fn_log_utf16: extern "C" fn(),
-    pub fn_print_memory_stats: extern "C" fn(instance: *mut NxLogImpl, category: *const c_char),
-    pub fn_print_unk_102: extern "C" fn(),
-    pub fn_get_game_dir: extern "C" fn(),
-}
+with_vftable!(
+    NxLogImpl,
 
-#[derive(Debug)]
-#[repr(C)]
-pub struct NxLogImpl {
-    pub vftable: *const NxLogImplVftable,
+    fn fn_destructor(),
+    fn fn_constructor(),
+    fn fn_open_log(),
+    fn fn_alloc_console(this: *mut NxLogImpl),
+    fn fn_free_console(this: *mut NxLogImpl),
+    fn fn_unk_48(),
+    fn fn_get_log_path(),
+    fn fn_print(this: *mut NxLogImpl, text: *const c_char),
+    fn fn_println(this: *mut NxLogImpl, text: *const c_char),
+    fn fn_log(this: *mut NxLogImpl, category: *const c_char, format: *const c_char), // also has a va_list as last for the format, but we're in rust, we can use format!()
+    fn fn_log_w(this: *mut NxLogImpl, category: *const c_char, format: *const c_char), // this also has the same va_list
+    fn fn_log_memory_statistics(this: *mut NxLogImpl, category: *const c_char),
+    fn fn_unk_80(),
+    fn fn_unk_88(),
+
     pub initialized: bool,
     pub handle: *mut c_void,
     pub unk_18: i32,
     pub unk_1c: i32,
-    pub unk_20: [u8; 1048576],
-    pub log_path: [i32; 128], // [wchar_t;128]
-    pub unk_100120: [u8; 256],
+    pub pad_20: [u8;0x10000],
+    pub log_path: [u16;128], // [wchar_t;128]
+    pub pad_100120: [u8;256],
     pub console_handle: HANDLE,
     pub lock: CRITICAL_SECTION,
-}
+);

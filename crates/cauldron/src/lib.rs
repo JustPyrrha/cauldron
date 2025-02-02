@@ -14,10 +14,10 @@ use crate::metadata::{
 };
 use crate::util::message_box;
 use crate::version::{CauldronGameType, GameVersion};
+use libdecima::log;
 use libdecima::mem::offsets::Offsets;
 use libdecima::types::nixxes::log::NxLogImpl;
 use libdecima::types::rtti::cstr_to_string;
-use log::{error, info};
 use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MhHook, MH_STATUS};
 use once_cell::sync::OnceCell;
 use semver::{Version, VersionReq};
@@ -29,7 +29,6 @@ use std::ffi::c_char;
 use std::fs::File;
 use std::path::PathBuf;
 use std::{fs, slice};
-use windows::core::{HSTRING, PCWSTR};
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK};
 use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
 
@@ -113,22 +112,28 @@ impl CauldronLoader {
     unsafe fn try_load_plugin(&mut self, plugin_path: &PathBuf) {
         let handle = libloading::Library::new(&plugin_path);
         let Ok(handle) = handle else {
-            error!("cauldron: failed to load plugin: {}", plugin_path.display());
+            log!(
+                "Cauldron",
+                "Failed to load plugin: {}",
+                plugin_path.display()
+            );
             return;
         };
         let metadata =
             handle.get::<extern "C" fn() -> &'static str>(b"__cauldron_plugin__metadata\0");
         let Ok(metadata) = metadata else {
-            error!(
-                "cauldron: not a valid plugin (missing metadata export): {}",
+            log!(
+                "Cauldron",
+                "Not a valid plugin (missing metadata export): {}",
                 plugin_path.display()
             );
             return;
         };
         let plugin = handle.get::<extern "C" fn() -> PluginBox>(b"__cauldron_plugin__new\0");
         let Ok(plugin) = plugin else {
-            error!(
-                "cauldron: not a valid plugin (missing create instance export): {}",
+            log!(
+                "Cauldron",
+                "Not a valid plugin (missing create instance export): {}",
                 plugin_path.display()
             );
             return;
@@ -136,8 +141,9 @@ impl CauldronLoader {
         let metadata_str = metadata();
         let metadata = toml::from_str::<PluginMetadataSchemaVersionOnly>(metadata_str);
         let Ok(metadata) = metadata else {
-            error!(
-                "cauldron: failed to parse plugin metadata: {}",
+            log!(
+                "Cauldron",
+                "Failed to parse plugin metadata: {}",
                 plugin_path.display()
             );
             return;
@@ -150,8 +156,9 @@ impl CauldronLoader {
             }
         };
         let Ok(metadata) = metadata else {
-            error!(
-                "cauldron: failed to parse plugin metadata: {}",
+            log!(
+                "Cauldron",
+                "Failed to parse plugin metadata: {}",
                 plugin_path.display()
             );
             return;
@@ -176,9 +183,11 @@ impl CauldronLoader {
             if a_deps.as_ref().is_some_and(|a| a.contains_key(b_id))
                 && b_deps.as_ref().is_some_and(|b| b.contains_key(a_id))
             {
-                error!(
-                    "cauldron: circular dependencies detected. ({} and {} depend on each other.)",
-                    a_id, b_id
+                log!(
+                    "Cauldron",
+                    "Circular dependencies detected. ({} and {} depend on each other.)",
+                    a_id,
+                    b_id
                 );
                 message_box(
                     "cauldron: plugin error",
@@ -208,9 +217,11 @@ impl CauldronLoader {
         let mut versions: HashMap<String, Version> = HashMap::new();
         self.plugins.iter().for_each(|p| {
             let Ok(version) = Version::parse(p.metadata.cauldron.version.clone().as_str()) else {
-                error!(
-                    "cauldron: {}'s version ({}) does not match semver requirements. exiting...",
-                    p.metadata.cauldron.id, p.metadata.cauldron.version
+                log!(
+                    "Cauldron",
+                    "{}'s version ({}) does not match semver requirements. exiting...",
+                    p.metadata.cauldron.id,
+                    p.metadata.cauldron.version
                 );
                 message_box(
                     "cauldron: plugin error",
@@ -236,28 +247,43 @@ impl CauldronLoader {
                     match constraints {
                         PluginMetadataDependency::Plain(version) => {
                             let Ok(version_req) = VersionReq::parse(version.as_str()) else {
-                                error!("cauldron: malformed dependency version requirement constraint {} in {}", version, plugin.metadata.cauldron.id);
+                                log!(
+                                    "Cauldron",
+                                    "Malformed dependency version requirement constraint {} in {}",
+                                    version,
+                                    plugin.metadata.cauldron.id
+                                );
                                 message_box("cauldron: plugin error", format!("malformed dependency version requirement constraint {} in {}.", version, plugin.metadata.cauldron.id).as_str(), MB_OK | MB_ICONERROR);
                                 std::process::exit(0);
                             };
 
                             if versions.contains_key(dep) {
                                 if !version_req.matches(&versions[dep]) {
-                                    error!(
+                                    log!(
+                                        "Cauldron",
                                         "{} {} {}",
                                         version_req.to_string(),
                                         &versions[dep].to_string(),
                                         dep
                                     );
 
-                                    error!("cauldron: plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, version);
+                                    log!(
+                                        "Cauldron",
+                                        "Plugin {} is missing dependency {} {} (version mismatch)",
+                                        plugin.metadata.cauldron.id,
+                                        dep,
+                                        version
+                                    );
                                     message_box("cauldron: plugin error", format!("plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, version).as_str(), MB_OK | MB_ICONERROR);
                                     std::process::exit(0);
                                 }
                             } else {
-                                error!(
-                                    "cauldron: plugin {} is missing dependency {} {}",
-                                    plugin.metadata.cauldron.id, dep, version
+                                log!(
+                                    "Cauldron",
+                                    "Plugin {} is missing dependency {} {}",
+                                    plugin.metadata.cauldron.id,
+                                    dep,
+                                    version
                                 );
                                 message_box(
                                     "cauldron: plugin error",
@@ -274,21 +300,35 @@ impl CauldronLoader {
                         PluginMetadataDependency::Detailed(detailed) => {
                             let Ok(version_req) = VersionReq::parse(detailed.version.as_str())
                             else {
-                                error!("cauldron: malformed dependency version requirement constraint {} in {}", detailed.version, plugin.metadata.cauldron.id);
+                                log!(
+                                    "Cauldron",
+                                    "Malformed dependency version requirement constraint {} in {}",
+                                    detailed.version,
+                                    plugin.metadata.cauldron.id
+                                );
                                 message_box("cauldron: plugin error", format!("malformed dependency version requirement constraint {} in {}.", detailed.version, plugin.metadata.cauldron.id).as_str(), MB_OK | MB_ICONERROR);
                                 std::process::exit(0);
                             };
 
                             if versions.contains_key(dep) {
                                 if !version_req.matches(&versions[dep]) {
-                                    error!("cauldron: plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, detailed.version);
+                                    log!(
+                                        "Cauldron",
+                                        "Plugin {} is missing dependency {} {} (version mismatch)",
+                                        plugin.metadata.cauldron.id,
+                                        dep,
+                                        detailed.version
+                                    );
                                     message_box("cauldron: plugin error", format!("plugin {} is missing dependency {} {} (version mismatch)", plugin.metadata.cauldron.id, dep, detailed.version).as_str(), MB_OK | MB_ICONERROR);
                                     std::process::exit(0);
                                 }
                             } else if !detailed.optional {
-                                error!(
-                                    "cauldron: plugin {} is missing dependency {} ({})",
-                                    plugin.metadata.cauldron.id, dep, detailed.version
+                                log!(
+                                    "Cauldron",
+                                    "Plugin {} is missing dependency {} ({})",
+                                    plugin.metadata.cauldron.id,
+                                    dep,
+                                    detailed.version
                                 );
                                 message_box(
                                     "cauldron: plugin error",
@@ -346,13 +386,14 @@ impl CauldronLoader {
                 format!("{}", authors),
             ]);
         });
-        info!(
-            "cauldron: found {} plugins:\n{}",
+        log!(
+            "Cauldron",
+            "Found {} plugins:\n{}",
             self.plugins.len(),
             table.build()
         );
 
-        info!("cauldron: initializing plugins...");
+        log!("Cauldron", "initializing plugins...");
         match unsafe { MH_Initialize() } {
             MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
             status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
@@ -372,7 +413,7 @@ impl CauldronLoader {
                 .ok()
                 .expect("cauldron: failed to apply queued hooks");
         };
-        info!("cauldron: plugins initialized.");
+        log!("Cauldron", "Plugins initialized.");
     }
 }
 
@@ -407,7 +448,7 @@ static NIXXES_PRINTLN: OnceCell<unsafe extern "C" fn(*mut NxLogImpl, *const c_ch
 #[cfg(feature = "nixxes")]
 unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
     // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
-    info!("{}", cstr_to_string(text).split_at(26).1);
+    ::log::info!("{}", cstr_to_string(text).split_at(26).1);
 
     (NIXXES_PRINTLN.get().unwrap())(this, text)
 }
@@ -445,7 +486,7 @@ pub unsafe fn handle_dll_attach() {
                 .unwrap()
         };
         let instance = unsafe { &*log_ptr };
-        let vftable = &unsafe { slice::from_raw_parts(instance.vftable, 1) }[0];
+        let vftable = &unsafe { slice::from_raw_parts(instance.vtbl, 1) }[0];
 
         match unsafe { MH_Initialize() } {
             MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
@@ -477,11 +518,12 @@ pub unsafe fn handle_dll_attach() {
         };
     }
 
-    info!("cauldron: starting v{}...", env!("CARGO_PKG_VERSION"));
+    log!("Cauldron", "Starting v{}...", env!("CARGO_PKG_VERSION"));
 
     if CauldronGameType::find_from_exe().is_none() {
-        error!(
-            "cauldron: Unknown game type \"{}\", exiting.",
+        log!(
+            "Cauldron",
+            "Unknown game type \"{}\", exiting.",
             current_exe()
                 .unwrap()
                 .file_name()

@@ -1,8 +1,10 @@
 #![feature(c_variadic)]
 #![feature(once_cell_get_mut)]
+#![feature(macro_metavar_expr_concat)]
+#![allow(static_mut_refs)]
 
 #[doc(include = "../README.md")]
-#[cfg(not(any(feature = "hfw")))]
+#[cfg(not(any(feature = "hfw", feature = "nixxes")))]
 compile_error!("At least one target feature must be enabled.");
 
 pub mod mem;
@@ -22,6 +24,28 @@ pub mod macros {
             const _: () = [(); 1][(::std::mem::offset_of!($t, $f) == $n) as usize ^ 1];
         };
     }
+
+    #[macro_export]
+    macro_rules! with_vftable {
+        ($name:ident, $(fn $func:ident($($var:ident: $var_ty:ty),*)$(-> $func_r:ty)?),*, $(pub $field:ident: $field_ty:ty),*,) => {
+            #[derive(Debug)]
+            #[repr(C)]
+            pub struct ${concat($name, Vtbl)} {
+                $(
+                    pub $func: extern "C" fn($($var: $var_ty,)*)$( -> $func_r)?,
+                )*
+            }
+
+            #[derive(Debug)]
+            #[repr(C)]
+            pub struct $name {
+                pub vtbl: *const ${concat($name, Vtbl)},
+                $(
+                    pub $field: $field_ty,
+                )*
+            }
+        };
+    }
 }
 
 #[cfg(feature = "nixxes")]
@@ -38,7 +62,7 @@ pub mod log {
                 .unwrap()
         };
         let instance = unsafe { &*log_ptr };
-        let vftable = &unsafe { slice::from_raw_parts(instance.vftable, 1) }[0];
+        let vftable = &unsafe { slice::from_raw_parts(instance.vtbl, 1) }[0];
 
         (vftable.fn_log)(
             log_ptr,
@@ -49,17 +73,30 @@ pub mod log {
 
     #[macro_export]
     macro_rules! log {
-        // log!("hello world!");
-        ($log:literal) => {
-            crate::log::log(module_path!(), $log);
+        // log!("category", *format! args*);
+        ($category:literal, $($arg:tt)*) => {
+            crate::log::log($category, format!($($arg)*).as_str());
         };
-        // log!("my category", "hello world!");
-        ($category:literal, $log:literal) => {
-            crate::log::log($category, $log);
+
+        // log!(*format! args*);
+        ($($arg:tt)*) => {
+            crate::log::log(module_path!(), format!($($arg)*).as_str());
         };
-        //
-        ($log:expr) => {
-            crate::log::log(module_path!(), $log);
+    }
+}
+
+#[cfg(not(feature = "nixxes"))]
+pub mod log {
+    #[macro_export]
+    macro_rules! log {
+        // log!("category", *format! args*);
+        ($category:literal, $($arg:tt)*) => {
+            // todo: unimplemented
+        };
+
+        // log!(*format! args*);
+        ($($arg:tt)*) => {
+            // todo: unimplemented
         };
     }
 }
