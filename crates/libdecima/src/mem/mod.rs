@@ -1,3 +1,4 @@
+pub mod scan;
 pub mod offsets;
 
 use std::slice;
