@@ -96,6 +96,6 @@ pub struct ExportedSymbols {
     pub groups: Array<*mut ExportedSymbolGroup>,
     pub dependencies_unk1: Array<*const RTTI>,
     pub dependencies_unk2: Array<*const RTTI>,
-    pub all_symbols: HashMap<*mut ExportedSymbol, u32>,
-    pub type_symbols: HashMap<*const c_char, *mut ExportedSymbol>,
+    pub all_symbols: HashMap<(*mut ExportedSymbol, u32)>,
+    pub type_symbols: HashMap<(*const c_char, *mut ExportedSymbol)>,
 }

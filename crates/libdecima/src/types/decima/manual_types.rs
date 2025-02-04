@@ -1,5 +1,3 @@
-use crate::assert_size;
-use std::any::Any;
 use std::marker::PhantomData;
 use std::slice;
 
@@ -12,7 +10,6 @@ pub struct Array<T> {
     pub capacity: u32,
     pub entries: *mut T,
 }
-// assert_size!(Array<dyn Any>, 16);
 
 impl<T> Array<T> {
     pub fn slice(&self) -> &[T] {
@@ -29,14 +26,13 @@ impl<T> Array<T> {
 pub struct Ref<T> {
     pub ptr: *mut T,
 }
-// assert_size!(Ref<dyn Any>, 8);
 
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct StreamingRef<T> {
     pub ptr: *mut T,
 }
-// assert_size!(StreamingRef<dyn Any>, 8);
+
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -45,7 +41,6 @@ pub struct UUIDRef<T> {
     pub uuid: [u8; 16],
     pub marker: PhantomData<T>,
 }
-// assert_size!(UUIDRef<dyn Any>, 16);
 
 // todo: reverse WeakPtr
 #[derive(Debug, Clone)]
@@ -54,11 +49,9 @@ pub struct WeakPtr<T> {
     pub unk: [u8; 32],
     pub marker: PhantomData<T>,
 }
-// assert_size!(WeakPtr<dyn Any>, 32);
 
 #[allow(non_camel_case_types)]
 pub type cptr<T> = Ref<T>;
-// assert_size!(cptr<dyn Any>, 8);
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -69,10 +62,8 @@ pub struct HashMapEntry<V> {
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct HashMap<K, V> {
-    pub entries: *mut HashMapEntry<V>,
+pub struct HashMap<T> {
+    pub entries: *mut HashMapEntry<T>,
     pub size: u32,
     pub capacity: u32,
-
-    pub key_marker: PhantomData<K>,
 }
