@@ -5,6 +5,7 @@ use windows::Win32::System::Threading::CRITICAL_SECTION;
 
 with_vftable!(
     NxLogImpl,
+    NxLogImplVtbl,
 
     fn fn_destructor(),
     fn fn_constructor(),

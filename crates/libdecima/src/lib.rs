@@ -1,5 +1,5 @@
 #![feature(once_cell_get_mut)]
-#![feature(macro_metavar_expr_concat)]
+// #![feature(macro_metavar_expr_concat)]
 #![allow(static_mut_refs)]
 
 #[doc(include = "../README.md")]
@@ -26,10 +26,29 @@ pub mod macros {
 
     #[macro_export]
     macro_rules! with_vftable {
-        ($name:ident, $(fn $func:ident($($var:ident: $var_ty:ty),*)$(-> $func_r:ty)?),*, $(pub $field:ident: $field_ty:ty),*,) => {
+        // todo: wait for macro_metavar_expr_concat to be stable [https://github.com/rust-lang/rust/issues/124225]
+        // ($name:ident, $(fn $func:ident($($var:ident: $var_ty:ty),*)$(-> $func_r:ty)?),*, $(pub $field:ident: $field_ty:ty),*,) => {
+        //     #[derive(Debug)]
+        //     #[repr(C)]
+        //     pub struct ${concat($name, Vtbl)} {
+        //         $(
+        //             pub $func: extern "C" fn($($var: $var_ty,)*)$( -> $func_r)?,
+        //         )*
+        //     }
+        //
+        //     #[derive(Debug)]
+        //     #[repr(C)]
+        //     pub struct $name {
+        //         pub vtbl: *const ${concat($name, Vtbl)},
+        //         $(
+        //             pub $field: $field_ty,
+        //         )*
+        //     }
+        // };
+        ($name:ident, $vtbl:ident, $(fn $func:ident($($var:ident: $var_ty:ty),*)$(-> $func_r:ty)?),*, $(pub $field:ident: $field_ty:ty),*$(,)?) => {
             #[derive(Debug)]
             #[repr(C)]
-            pub struct ${concat($name, Vtbl)} {
+            pub struct $vtbl {
                 $(
                     pub $func: extern "C" fn($($var: $var_ty,)*)$( -> $func_r)?,
                 )*
@@ -38,7 +57,7 @@ pub mod macros {
             #[derive(Debug)]
             #[repr(C)]
             pub struct $name {
-                pub vtbl: *const ${concat($name, Vtbl)},
+                pub vtbl: *const $vtbl,
                 $(
                     pub $field: $field_ty,
                 )*
