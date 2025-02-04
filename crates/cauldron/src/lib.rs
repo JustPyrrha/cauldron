@@ -480,10 +480,8 @@ pub unsafe fn handle_dll_attach() {
     #[cfg(feature = "nixxes")]
     {
         Offsets::setup();
-        let log_ptr = unsafe {
-            *Offsets::resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
-                .unwrap()
-        };
+        let log_ptr =
+            unsafe { *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap() };
         let instance = unsafe { &*log_ptr };
         let vftable = &unsafe { slice::from_raw_parts(instance.vtbl, 1) }[0];
 

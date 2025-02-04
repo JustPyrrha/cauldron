@@ -31,7 +31,7 @@ impl CauldronPlugin for PulsePlugin {
 
         let register_type = unsafe {
             MhHook::new(
-                *Offsets::resolve("RTTIFactory::RegisterType").unwrap() as *mut _,
+                *Offsets::resolve_raw("RTTIFactory::RegisterType").unwrap() as *mut _,
                 rtti_factory_register_type_impl as *mut _,
             )
             .unwrap()
@@ -39,7 +39,7 @@ impl CauldronPlugin for PulsePlugin {
 
         let register_all_types = unsafe {
             MhHook::new(
-                *Offsets::resolve("RTTIFactory::RegisterAllTypes").unwrap() as *mut _,
+                *Offsets::resolve_raw("RTTIFactory::RegisterAllTypes").unwrap() as *mut _,
                 rtti_factory_register_all_types_impl as *mut _,
             )
             .unwrap()

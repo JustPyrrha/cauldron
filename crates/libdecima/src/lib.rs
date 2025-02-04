@@ -1,4 +1,3 @@
-#![feature(c_variadic)]
 #![feature(once_cell_get_mut)]
 #![feature(macro_metavar_expr_concat)]
 #![allow(static_mut_refs)]
@@ -56,10 +55,8 @@ pub mod log {
 
     pub fn log(category: &str, text: &str) {
         Offsets::setup();
-        let log_ptr = unsafe {
-            *Offsets::resolve_t::<*mut NxLogImpl>("nx::NxLogImpl::Instance")
-                .unwrap()
-        };
+        let log_ptr =
+            unsafe { *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap() };
         let instance = unsafe { &*log_ptr };
         let vftable = &unsafe { slice::from_raw_parts(instance.vtbl, 1) }[0];
 

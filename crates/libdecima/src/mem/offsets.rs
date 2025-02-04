@@ -32,11 +32,11 @@ impl Offsets {
         );
     }
 
-    pub fn resolve(name: &str) -> Option<&*const u8> {
+    pub fn resolve_raw(name: &str) -> Option<&*const u8> {
         Offsets::instance().addresses.get(name)
     }
 
-    pub fn resolve_t<T: Sized>(name: &str) -> Option<*mut T> {
+    pub fn resolve<T: Sized>(name: &str) -> Option<*mut T> {
         Some(
             (get_module().unwrap().0 + *Offsets::instance().addresses.get(name)? as usize)
                 as *mut T,
