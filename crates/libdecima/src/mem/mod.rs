@@ -1,5 +1,5 @@
-pub mod scan;
 pub mod offsets;
+pub mod scan;
 
 use std::slice;
 use windows::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};

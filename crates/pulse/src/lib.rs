@@ -6,12 +6,12 @@ use crate::json::export_types_json;
 use cauldron::{define_cauldron_plugin, CauldronLoader, CauldronPlugin};
 use libdecima::log;
 use libdecima::mem::offsets::Offsets;
+use libdecima::mem::scan::{scan_memory_for_types, scan_recursively};
 use libdecima::mem::{find_pattern, get_data_section, get_rdata_section};
 use libdecima::types::rtti::{as_atom, as_compound, as_container, as_enum, as_pointer, RTTI};
 use minhook::MhHook;
 use once_cell::sync::OnceCell;
 use std::ffi::c_void;
-use libdecima::mem::scan::{scan_memory_for_types, scan_recursively};
 
 static RTTI_FACTORY_REGISTER_TYPE: OnceCell<
     unsafe fn(factory: *mut c_void, rtti: *const RTTI) -> bool,
@@ -66,7 +66,7 @@ unsafe fn rtti_factory_register_type_impl(factory: *mut c_void, rtti: *const RTT
     let result = (RTTI_FACTORY_REGISTER_TYPE.get().unwrap())(factory, rtti);
 
     if result {
-        scan_recursively(rtti, unsafe { FOUND_TYPES.get_mut().unwrap() }, |_|{});
+        scan_recursively(rtti, unsafe { FOUND_TYPES.get_mut().unwrap() }, |_| {});
     }
 
     result
@@ -82,7 +82,7 @@ unsafe fn rtti_factory_register_all_types_impl() {
         FOUND_TYPES
             .get_mut()
             .unwrap()
-            .append(&mut scan_memory_for_types(|_|{}));
+            .append(&mut scan_memory_for_types(|_| {}));
     }
 
     log!("pulse", "scan finished, found {} types.", unsafe {

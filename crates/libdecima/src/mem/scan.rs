@@ -1,6 +1,6 @@
-use std::ffi::c_void;
 use crate::mem::{find_pattern, get_data_section, get_rdata_section};
 use crate::types::rtti::{as_atom, as_compound, as_container, as_enum, as_pointer, RTTI};
+use std::ffi::c_void;
 
 pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -> Vec<*const RTTI> {
     let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
@@ -31,9 +31,9 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
             if primitive.size == 0
                 || primitive.alignment == 0
                 || (!primitive.fn_constructor.is_null()
-                && !is_valid_ptr(primitive.fn_constructor as usize))
+                    && !is_valid_ptr(primitive.fn_constructor as usize))
                 || (!primitive.fn_destructor.is_null()
-                && !is_valid_ptr(primitive.fn_destructor as usize))
+                    && !is_valid_ptr(primitive.fn_destructor as usize))
                 || !is_valid_ptr(primitive.parent_type as usize)
                 || !is_valid_ptr(primitive.type_name as usize)
             {
@@ -53,9 +53,9 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
                 || !is_valid_ptr(container.container_type as usize)
                 || !is_valid_ptr((&*container.container_type).type_name as usize)
                 || (!(&*container.container_type).fn_constructor.is_null()
-                && !is_valid_ptr((&*container.container_type).fn_constructor as usize))
+                    && !is_valid_ptr((&*container.container_type).fn_constructor as usize))
                 || (!(&*container.container_type).fn_destructor.is_null()
-                && !is_valid_ptr((&*container.container_type).fn_destructor as usize))
+                    && !is_valid_ptr((&*container.container_type).fn_destructor as usize))
             {
                 continue;
             }
@@ -66,9 +66,9 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
                 || !is_valid_ptr((&*pointer.pointer_type).type_name as usize)
                 || !is_valid_ptr(pointer.type_name as usize)
                 || (!(&*pointer.pointer_type).fn_constructor.is_null()
-                && !is_valid_ptr((&*pointer.pointer_type).fn_constructor as usize))
+                    && !is_valid_ptr((&*pointer.pointer_type).fn_constructor as usize))
                 || (!(&*pointer.pointer_type).fn_destructor.is_null()
-                && !is_valid_ptr((&*pointer.pointer_type).fn_destructor as usize))
+                    && !is_valid_ptr((&*pointer.pointer_type).fn_destructor as usize))
             {
                 continue;
             }
@@ -78,9 +78,9 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
                 || (compound.num_bases > 0 && !is_valid_ptr(compound.bases as usize))
                 || (compound.num_attrs > 0 && !is_valid_ptr(compound.attrs as usize))
                 || (compound.num_message_handlers > 0
-                && !is_valid_ptr(compound.message_handlers as usize))
+                    && !is_valid_ptr(compound.message_handlers as usize))
                 || (compound.num_ordered_attrs > 0
-                && !is_valid_ptr(compound.ordered_attrs as usize))
+                    && !is_valid_ptr(compound.ordered_attrs as usize))
             {
                 continue;
             }
@@ -94,7 +94,11 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
     types
 }
 
-pub unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>, callback: fn(rtti: *const RTTI)) {
+pub unsafe fn scan_recursively(
+    rtti: *const RTTI,
+    types: &mut Vec<*const RTTI>,
+    callback: fn(rtti: *const RTTI),
+) {
     if rtti.is_null() || types.contains(&rtti) {
         return;
     }
@@ -108,7 +112,11 @@ pub unsafe fn scan_recursively(rtti: *const RTTI, types: &mut Vec<*const RTTI>, 
     if let Some(pointer) = as_pointer(rtti) {
         scan_recursively((*pointer).item_type, types, callback);
     } else if let Some(primitive) = as_atom(rtti) {
-        scan_recursively(std::mem::transmute((*primitive).parent_type), types, callback);
+        scan_recursively(
+            std::mem::transmute((*primitive).parent_type),
+            types,
+            callback,
+        );
     } else if let Some(compound) = as_compound(rtti) {
         let compound = &*compound;
         for base in compound.bases() {

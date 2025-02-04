@@ -33,7 +33,6 @@ pub struct StreamingRef<T> {
     pub ptr: *mut T,
 }
 
-
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct UUIDRef<T> {
