@@ -1,5 +1,5 @@
 #![feature(once_cell_get_mut)]
-// #![feature(macro_metavar_expr_concat)]
+#![feature(macro_metavar_expr_concat)]
 #![allow(static_mut_refs)]
 
 #[doc(include = "../README.md")]
@@ -25,41 +25,46 @@ pub mod macros {
     }
 
     #[macro_export]
-    macro_rules! with_vftable {
-        // todo: wait for macro_metavar_expr_concat to be stable [https://github.com/rust-lang/rust/issues/124225]
-        // ($name:ident, $(fn $func:ident($($var:ident: $var_ty:ty),*)$(-> $func_r:ty)?),*, $(pub $field:ident: $field_ty:ty),*,) => {
-        //     #[derive(Debug)]
-        //     #[repr(C)]
-        //     pub struct ${concat($name, Vtbl)} {
-        //         $(
-        //             pub $func: extern "C" fn($($var: $var_ty,)*)$( -> $func_r)?,
-        //         )*
-        //     }
-        //
-        //     #[derive(Debug)]
-        //     #[repr(C)]
-        //     pub struct $name {
-        //         pub vtbl: *const ${concat($name, Vtbl)},
-        //         $(
-        //             pub $field: $field_ty,
-        //         )*
-        //     }
-        // };
-        ($name:ident, $vtbl:ident, $(fn $func:ident($($var:ident: $var_ty:ty),*)$(-> $func_r:ty)?),*, $(pub $field:ident: $field_ty:ty),*$(,)?) => {
-            #[derive(Debug)]
+    macro_rules! gen_with_vtbl {
+        (
+            $name:ident,
+            $(
+                fn $func:ident($($arg:ident: $arg_t:ty),*) $(-> $func_ret:ty)?
+            );*;
+            $(
+                pub $field:ident: $field_t:ty
+            ),*,
+        ) => {
             #[repr(C)]
-            pub struct $vtbl {
+            #[derive(Debug)]
+            #[allow(non_camel_case_types)]
+            pub struct /* VFT */ $ {concat($name, _vtbl)} {
                 $(
-                    pub $func: extern "C" fn($($var: $var_ty,)*)$( -> $func_r)?,
-                )*
+                    pub $func: extern "C" fn(this: *mut $name $(, $arg: $arg_t)*) $(-> $func_ret)?
+                ),*
             }
 
-            #[derive(Debug)]
             #[repr(C)]
+            #[derive(Debug)]
             pub struct $name {
-                pub vtbl: *const $vtbl,
+                pub __vftable: *mut $ {concat($name, _vtbl)},
                 $(
-                    pub $field: $field_ty,
+                    pub $field: $field_t
+                ),*
+            }
+
+            impl $name {
+                pub fn __vftable<'a>(this: *mut $name) -> &'a $ {concat($name, _vtbl)} {
+                    let instance = unsafe { &*this };
+                    let vftable = unsafe { &*instance.__vftable };
+                    vftable
+                }
+
+                $(
+                    pub fn $func(this: *mut $name $(, $arg: $arg_t)*) $(-> $func_ret)? {
+                        let vftable = Self::__vftable(this as *const _ as *mut _);
+                        (vftable.$func)(this $(, $arg)*)
+                    }
                 )*
             }
         };
@@ -70,17 +75,13 @@ pub mod macros {
 pub mod log {
     use crate::mem::offsets::Offsets;
     use crate::types::nixxes::log::NxLogImpl;
-    use std::slice;
 
     pub fn log(category: &str, text: &str) {
         Offsets::setup();
-        let log_ptr =
+        let log =
             unsafe { *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap() };
-        let instance = unsafe { &*log_ptr };
-        let vftable = &unsafe { slice::from_raw_parts(instance.vtbl, 1) }[0];
-
-        (vftable.fn_log)(
-            log_ptr,
+        NxLogImpl::fn_log(
+            log,
             format!("{}\0", category).as_str().as_ptr() as *const _,
             format!("{}\0", text).as_str().as_ptr() as *const _,
         );

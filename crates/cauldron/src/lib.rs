@@ -26,9 +26,9 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env::{current_dir, current_exe};
 use std::ffi::c_char;
+use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
-use std::{fs, slice};
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK};
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AllocConsole, AttachConsole};
 
@@ -484,8 +484,7 @@ pub unsafe fn handle_dll_attach() {
         {
             Offsets::setup();
             let log_ptr = *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap();
-            let instance = &*log_ptr;
-            let vftable = &slice::from_raw_parts(instance.vtbl, 1)[0];
+            let vftable = NxLogImpl::__vftable(log_ptr);
 
             match MH_Initialize() {
                 MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
