@@ -19,7 +19,7 @@ pub mod macros {
 
     #[macro_export]
     macro_rules! assert_offset {
-        ($t:ty, $f:expr, $n:literal) => {
+        ($t:ty, $f:expr_2021, $n:literal) => {
             const _: () = [(); 1][(::std::mem::offset_of!($t, $f) == $n) as usize ^ 1];
         };
     }

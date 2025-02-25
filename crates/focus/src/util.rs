@@ -168,7 +168,7 @@ pub fn print_dxgi_debug_messages() {
     unsafe { diq.ClearStoredMessages(DXGI_DEBUG_ALL) };
 }
 
-pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] {
+pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] { unsafe {
     //Check if the page pointed to by `ptr.rs` is readable.
     unsafe fn is_readable(
         ptr: *const c_void,
@@ -224,4 +224,4 @@ pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] {
     // - `ptr.rs` is a valid pointer to `limit` elements of type `T` and is properly
     //   aligned
     std::slice::from_raw_parts(ptr, limit)
-}
+}}

@@ -219,14 +219,14 @@ pub struct RTTIPod {
 assert_size!(RTTIPod, 0x18);
 
 macro_rules! impl_inherits_rtti {
-    ($n:ident, $t:ty, $($e:expr),+) => {
-        pub unsafe fn $n(rtti: *const RTTI) -> Option<*const $t> {
+    ($n:ident, $t:ty, $($e:expr_2021),+) => {
+        pub unsafe fn $n(rtti: *const RTTI) -> Option<*const $t> { unsafe {
             if !rtti.is_null() && ($((*rtti).kind == $e)||+) {
                 Some(std::mem::transmute(rtti))
             } else {
                 None
             }
-        }
+        }}
     };
 }
 
@@ -301,39 +301,39 @@ impl Display for RTTIKind {
 }
 
 impl RTTICompound {
-    pub unsafe fn bases(&self) -> &[RTTIBase] {
+    pub unsafe fn bases(&self) -> &[RTTIBase] { unsafe {
         if self.num_bases > 0 {
             slice::from_raw_parts(self.bases, self.num_bases as usize)
         } else {
             &[]
         }
-    }
+    }}
 
-    pub unsafe fn attributes(&self) -> &[RTTIAttr] {
+    pub unsafe fn attributes(&self) -> &[RTTIAttr] { unsafe {
         if self.num_attrs > 0 {
             slice::from_raw_parts(self.attrs, self.num_attrs as usize)
         } else {
             &[]
         }
-    }
+    }}
 
-    pub unsafe fn message_handlers(&self) -> &[RTTIMessageHandler] {
+    pub unsafe fn message_handlers(&self) -> &[RTTIMessageHandler] { unsafe {
         if self.num_message_handlers > 0 {
             slice::from_raw_parts(self.message_handlers, self.num_message_handlers as usize)
         } else {
             &[]
         }
-    }
+    }}
 }
 
 impl RTTIEnum {
-    pub unsafe fn values(&self) -> &[RTTIValue] {
+    pub unsafe fn values(&self) -> &[RTTIValue] { unsafe {
         if self.num_values > 0 {
             slice::from_raw_parts(self.values, self.num_values as usize)
         } else {
             &[]
         }
-    }
+    }}
 }
 
 impl RTTIValue {

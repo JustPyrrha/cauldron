@@ -61,7 +61,7 @@ unsafe impl Send for PulsePlugin {}
 
 define_cauldron_plugin!(PulsePlugin, include_str!("../pulse.cauldron.toml"));
 
-unsafe fn rtti_factory_register_type_impl(factory: *mut c_void, rtti: *const RTTI) -> bool {
+unsafe fn rtti_factory_register_type_impl(factory: *mut c_void, rtti: *const RTTI) -> bool { unsafe {
     FOUND_TYPES.get_or_init(|| Vec::new());
     let result = (RTTI_FACTORY_REGISTER_TYPE.get().unwrap())(factory, rtti);
 
@@ -70,9 +70,9 @@ unsafe fn rtti_factory_register_type_impl(factory: *mut c_void, rtti: *const RTT
     }
 
     result
-}
+}}
 
-unsafe fn rtti_factory_register_all_types_impl() {
+unsafe fn rtti_factory_register_all_types_impl() { unsafe {
     (RTTI_FACTORY_REGISTER_ALL_TYPES.get().unwrap())();
 
     log!("scanning for rtti structures...");
@@ -92,4 +92,4 @@ unsafe fn rtti_factory_register_all_types_impl() {
     log!("exporting types...");
     export_types_json(unsafe { FOUND_TYPES.get().unwrap() });
     log!("done.")
-}
+}}

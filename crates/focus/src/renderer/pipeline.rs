@@ -141,7 +141,7 @@ unsafe extern "system" fn pipeline_wnd_proc(
     msg: u32,
     wparam: usize,
     lparam: isize,
-) -> LRESULT {
+) -> LRESULT { unsafe {
     let shared_state = {
         let Some(guard) = PIPELINE_STATES.try_lock() else {
             error!("Could not lock shared state in window procedure");
@@ -188,4 +188,4 @@ unsafe extern "system" fn pipeline_wnd_proc(
             LPARAM(lparam),
         )
     }
-}
+}}

@@ -109,7 +109,7 @@ impl CauldronLoader {
         paths
     }
 
-    unsafe fn try_load_plugin(&mut self, plugin_path: &PathBuf) {
+    unsafe fn try_load_plugin(&mut self, plugin_path: &PathBuf) { unsafe {
         let handle = libloading::Library::new(&plugin_path);
         let Ok(handle) = handle else {
             log!(
@@ -171,7 +171,7 @@ impl CauldronLoader {
         });
 
         self.sort_and_validate_plugins();
-    }
+    }}
 
     fn sort_and_validate_plugins(&mut self) {
         self.plugins.sort_by(|a, b| {
@@ -419,17 +419,17 @@ impl CauldronLoader {
 
 #[macro_export]
 macro_rules! define_cauldron_plugin {
-    ($plugin:ty, $meta:expr) => {
+    ($plugin:ty, $meta:expr_2021) => {
         #[cfg(not(test))]
         mod __cauldron_plugin {
             use super::*;
 
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             extern "C" fn __cauldron_plugin__metadata() -> &'static str {
                 $meta
             }
 
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             extern "C" fn __cauldron_plugin__new() -> $crate::PluginBox {
                 Box::new(<$plugin as $crate::CauldronPlugin>::new())
             }
@@ -446,15 +446,15 @@ static NIXXES_PRINTLN: OnceCell<unsafe extern "C" fn(*mut NxLogImpl, *const c_ch
     OnceCell::new();
 
 #[cfg(feature = "nixxes")]
-unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
+unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) { unsafe {
     // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
     ::log::info!("{}", cstr_to_string(text).split_at(26).1);
 
     (NIXXES_PRINTLN.get().unwrap())(this, text)
-}
+}}
 
 #[doc(hidden)]
-pub unsafe fn handle_dll_attach() {
+pub unsafe fn handle_dll_attach() { unsafe {
     let config = load_config();
     let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
     if config.logging.show_console {
@@ -547,4 +547,4 @@ pub unsafe fn handle_dll_attach() {
 
         instance
     });
-}
+}}

@@ -2,7 +2,7 @@ use crate::mem::{find_pattern, get_data_section, get_rdata_section};
 use crate::types::rtti::{as_atom, as_compound, as_container, as_enum, as_pointer, RTTI};
 use std::ffi::c_void;
 
-pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -> Vec<*const RTTI> {
+pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -> Vec<*const RTTI> { unsafe {
     let (data_start, data_end) = get_data_section().unwrap_or((0, 0));
     let (rdata_start, rdata_end) = get_rdata_section().unwrap_or((0, 0));
 
@@ -92,13 +92,13 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
     }
 
     types
-}
+}}
 
 pub unsafe fn scan_recursively(
     rtti: *const RTTI,
     types: &mut Vec<*const RTTI>,
     callback: fn(rtti: *const RTTI),
-) {
+) { unsafe {
     if rtti.is_null() || types.contains(&rtti) {
         return;
     }
@@ -129,4 +129,4 @@ pub unsafe fn scan_recursively(
             scan_recursively(msg_handler.message, types, callback);
         }
     }
-}
+}}

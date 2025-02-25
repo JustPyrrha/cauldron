@@ -76,7 +76,7 @@ impl TextureHeap {
         })
     }
 
-    unsafe fn resize_heap(&mut self) -> Result<()> {
+    unsafe fn resize_heap(&mut self) -> Result<()> { unsafe {
         let mut desc = self.srv_heap.GetDesc();
         let mut desc_staging = self.srv_staging_heap.GetDesc();
         let old_num_descriptors = desc.NumDescriptors;
@@ -118,14 +118,14 @@ impl TextureHeap {
             });
 
         Ok(())
-    }
+    }}
 
     unsafe fn create_texture(
         &mut self,
         tid: TextureId,
         width: u32,
         height: u32,
-    ) -> Result<TextureId> {
+    ) -> Result<TextureId> { unsafe {
         self.resize_heap()?;
 
         let cpu_heap_stg_start = self.srv_staging_heap.GetCPUDescriptorHandleForHeapStart();
@@ -216,7 +216,7 @@ impl TextureHeap {
         );
 
         Ok(tid)
-    }
+    }}
 
     unsafe fn upload_texture(
         &mut self,
@@ -227,7 +227,7 @@ impl TextureHeap {
         is_partial: bool,
         copy_x: u32,
         copy_y: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let texture = &self.textures[&texture_id];
         if (texture.width != width || texture.height != height as _) && !is_partial {
             error!(
@@ -336,9 +336,9 @@ impl TextureHeap {
         let _ = ManuallyDrop::into_inner(dst_location.pResource);
 
         Ok(())
-    }
+    }}
 
-    pub unsafe fn update(&mut self, delta: TexturesDelta) -> Result<()> {
+    pub unsafe fn update(&mut self, delta: TexturesDelta) -> Result<()> { unsafe {
         for (tid, delta) in delta.set {
             match delta.image {
                 ImageData::Color(ref ci) => {
@@ -413,5 +413,5 @@ impl TextureHeap {
         }
 
         Ok(())
-    }
+    }}
 }

@@ -170,7 +170,7 @@ impl D3D12RenderEngine {
         ctx: &Context,
         egui_output: RendererOutput,
         render_target: &ID3D12Resource,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         self.texture_heap.update(egui_output.textures_delta)?;
         if egui_output.shapes.is_empty() {
             return Ok(());
@@ -264,9 +264,9 @@ impl D3D12RenderEngine {
             idx_offset += idx_len;
         }
         Ok(())
-    }
+    }}
 
-    unsafe fn setup_render_state(&mut self, frame_size: (u32, u32)) {
+    unsafe fn setup_render_state(&mut self, frame_size: (u32, u32)) { unsafe {
         self.command_list.RSSetViewports(&[D3D12_VIEWPORT {
             TopLeftX: 0f32,
             TopLeftY: 0f32,
@@ -296,7 +296,7 @@ impl D3D12RenderEngine {
         self.command_list
             .SetGraphicsRootSignature(&self.root_signature);
         self.command_list.OMSetBlendFactor(Some(&[0f32; 4]));
-    }
+    }}
 }
 
 unsafe fn create_command_objects(
@@ -306,7 +306,7 @@ unsafe fn create_command_objects(
     ID3D12CommandQueue,
     ID3D12CommandAllocator,
     ID3D12GraphicsCommandList,
-)> {
+)> { unsafe {
     let device: ID3D12Device = util::try_out_ptr(|v| unsafe { command_queue.GetDevice(v) })?;
     let command_queue = command_queue.clone();
 
@@ -321,9 +321,9 @@ unsafe fn create_command_objects(
     command_list.SetName(w!("sunwing::focus Render Engine Command List"))?;
 
     Ok((device, command_queue, command_allocator, command_list))
-}
+}}
 
-unsafe fn create_heaps(device: &ID3D12Device) -> Result<(ID3D12DescriptorHeap, TextureHeap)> {
+unsafe fn create_heaps(device: &ID3D12Device) -> Result<(ID3D12DescriptorHeap, TextureHeap)> { unsafe {
     let rtv_heap: ID3D12DescriptorHeap =
         device.CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
             Type: D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
@@ -343,11 +343,11 @@ unsafe fn create_heaps(device: &ID3D12Device) -> Result<(ID3D12DescriptorHeap, T
     let texture_heap = TextureHeap::new(device, srv_heap)?;
 
     Ok((rtv_heap, texture_heap))
-}
+}}
 
 unsafe fn create_shader_program(
     device: &ID3D12Device,
-) -> Result<(ID3D12RootSignature, ID3D12PipelineState)> {
+) -> Result<(ID3D12RootSignature, ID3D12PipelineState)> { unsafe {
     let parameters = [
         D3D12_ROOT_PARAMETER {
             ParameterType: D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
@@ -599,7 +599,7 @@ unsafe fn create_shader_program(
     let _ = ManuallyDrop::into_inner(pso_desc.pRootSignature);
 
     Ok((root_signature, pipeline_state))
-}
+}}
 
 struct Buffer<T: Sized> {
     resource: ID3D12Resource,

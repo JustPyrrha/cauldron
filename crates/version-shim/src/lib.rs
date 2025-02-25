@@ -19,7 +19,7 @@ use windows_sys::{
     },
 };
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "system" fn DllMain(_: isize, reason: u32, _: usize) -> bool {
     if reason == DLL_PROCESS_ATTACH {
         thread::spawn(inject_loader);
@@ -53,7 +53,7 @@ macro __lazy_export($(fn $f:ident($($i:ident: $a:ty),*) -> $r:ty);+;) {
     paste! {
         $(
             #[allow(clippy::many_single_char_names)]
-            #[export_name = "" $f ""]
+            #[unsafe(export_name = "" $f "")]
             unsafe extern "system" fn [<__ $f:snake>]($($i: $a),*) -> $r {
                 static [<$f:snake:upper>]: OnceCell<usize> = OnceCell::new();
 

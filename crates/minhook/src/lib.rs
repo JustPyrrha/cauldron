@@ -42,7 +42,7 @@ pub enum MH_STATUS {
     MH_ERROR_FUNCTION_NOT_FOUND,
 }
 
-extern "system" {
+unsafe extern "system" {
     pub fn MH_Initialize() -> MH_STATUS;
     pub fn MH_Uninitialize() -> MH_STATUS;
     pub fn MH_CreateHook(
@@ -89,7 +89,7 @@ impl MhHook {
     /// # Safety
     ///
     /// Most definitely undefined behavior.
-    pub unsafe fn new(addr: *mut c_void, hook_impl: *mut c_void) -> Result<Self, MH_STATUS> {
+    pub unsafe fn new(addr: *mut c_void, hook_impl: *mut c_void) -> Result<Self, MH_STATUS> { unsafe {
         let mut trampoline = null_mut();
         MH_CreateHook(addr, hook_impl, &mut trampoline).ok_context("MH_CreateHook")?;
 
@@ -98,7 +98,7 @@ impl MhHook {
             hook_impl,
             trampoline,
         })
-    }
+    }}
 
     pub fn trampoline(&self) -> *mut c_void {
         self.trampoline
@@ -107,14 +107,14 @@ impl MhHook {
     /// # Safety
     ///
     /// Most definitely undefined behavior.
-    pub unsafe fn queue_enable(&self) -> Result<(), MH_STATUS> {
+    pub unsafe fn queue_enable(&self) -> Result<(), MH_STATUS> { unsafe {
         MH_QueueEnableHook(self.addr).ok_context("MH_QueueEnableHook")
-    }
+    }}
 
     /// # Safety
     ///
     /// Most definitely undefined behavior.
-    pub unsafe fn queue_disable(&self) -> Result<(), MH_STATUS> {
+    pub unsafe fn queue_disable(&self) -> Result<(), MH_STATUS> { unsafe {
         MH_QueueDisableHook(self.addr).ok_context("MH_QueueDisableHook")
-    }
+    }}
 }

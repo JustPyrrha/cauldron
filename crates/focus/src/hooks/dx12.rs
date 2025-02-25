@@ -100,7 +100,7 @@ impl InitializationContext {
     unsafe fn check_command_queue(
         swap_chain: &IDXGISwapChain3,
         queue: &ID3D12CommandQueue,
-    ) -> bool {
+    ) -> bool { unsafe {
         let swap_chain_ptr = swap_chain.as_raw() as *mut *mut c_void;
         let readable = util::readable_region(swap_chain_ptr, 512);
 
@@ -117,7 +117,7 @@ impl InitializationContext {
                 false
             }
         }
-    }
+    }}
 }
 
 static INITIALIZATION_CONTEXT: Mutex<InitializationContext> =
@@ -125,7 +125,7 @@ static INITIALIZATION_CONTEXT: Mutex<InitializationContext> =
 static mut PIPELINE: OnceCell<Mutex<Pipeline>> = OnceCell::new();
 static mut RENDER_LOOP: OnceCell<Box<dyn EguiRenderLoop + Send + Sync>> = OnceCell::new();
 
-unsafe fn init_pipeline() -> Result<Mutex<Pipeline>> {
+unsafe fn init_pipeline() -> Result<Mutex<Pipeline>> { unsafe {
     let Some((swap_chain, command_queue)) = ({ INITIALIZATION_CONTEXT.lock().get() }) else {
         error!("Initialization context not initialized");
         return Err(Error::from_hresult(HRESULT(-1)));
@@ -151,7 +151,7 @@ unsafe fn init_pipeline() -> Result<Mutex<Pipeline>> {
         })?;
 
     Ok(Mutex::new(pipeline))
-}
+}}
 
 fn render(swap_chain: &IDXGISwapChain3) -> Result<()> {
     unsafe {
@@ -174,7 +174,7 @@ unsafe extern "system" fn dxgi_swap_chain_present_impl(
     swap_chain: IDXGISwapChain3,
     sync_interval: u32,
     flags: u32,
-) -> HRESULT {
+) -> HRESULT { unsafe {
     {
         INITIALIZATION_CONTEXT.lock().insert_swap_chain(&swap_chain);
     }
@@ -189,7 +189,7 @@ unsafe extern "system" fn dxgi_swap_chain_present_impl(
         error!("render error: {e:?}");
     }
     dxgi_swap_chain_present(swap_chain, sync_interval, flags)
-}
+}}
 
 unsafe extern "system" fn dxgi_swap_chain_resize_buffers_impl(
     this: IDXGISwapChain3,
@@ -198,19 +198,19 @@ unsafe extern "system" fn dxgi_swap_chain_resize_buffers_impl(
     height: u32,
     new_format: DXGI_FORMAT,
     flags: u32,
-) -> HRESULT {
+) -> HRESULT { unsafe {
     let Trampolines {
         dxgi_swap_chain_resize_buffers,
         ..
     } = TRAMPOLINES.get().expect("dx12 trampolines not initialized");
     dxgi_swap_chain_resize_buffers(this, buffer_count, width, height, new_format, flags)
-}
+}}
 
 unsafe extern "system" fn d3d12_command_queue_execute_command_lists_impl(
     command_queue: ID3D12CommandQueue,
     num_command_lists: u32,
     command_lists: *mut ID3D12CommandList,
-) {
+) { unsafe {
     {
         INITIALIZATION_CONTEXT
             .lock()
@@ -225,7 +225,7 @@ unsafe extern "system" fn d3d12_command_queue_execute_command_lists_impl(
         .expect("d3d12 trampolines not initialized");
 
     d3d12_command_queue_execute_command_lists(command_queue, num_command_lists, command_lists);
-}
+}}
 
 fn get_target_addrs() -> (
     FnDXGISwapChainPresent,
@@ -306,7 +306,7 @@ impl Dx12Hooks {
     pub unsafe fn new<T>(t: T) -> Self
     where
         T: EguiRenderLoop + Send + Sync + 'static,
-    {
+    { unsafe {
         let (
             dxgi_swap_chain_present_addr,
             dxgi_swap_chain_resize_buffers_addr,
@@ -350,7 +350,7 @@ impl Dx12Hooks {
         });
 
         Self([hook_present, hook_resize_buffers, hook_cqecl])
-    }
+    }}
 }
 
 impl Hooks for Dx12Hooks {
@@ -366,10 +366,10 @@ impl Hooks for Dx12Hooks {
         &self.0
     }
 
-    unsafe fn unhook(&mut self) {
+    unsafe fn unhook(&mut self) { unsafe {
         TRAMPOLINES.take();
         PIPELINE.take();
         RENDER_LOOP.take();
         *INITIALIZATION_CONTEXT.lock() = InitializationContext::Empty
-    }
+    }}
 }

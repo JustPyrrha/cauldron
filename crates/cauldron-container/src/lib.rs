@@ -1,6 +1,6 @@
 #[doc(hidden)]
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "system" fn DllMain(_: usize, reason: u32, _: isize) -> bool {
     match reason {
         1 => {

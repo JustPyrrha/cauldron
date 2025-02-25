@@ -32,9 +32,9 @@ impl DummyHwnd {
             msg: u32,
             wparam: WPARAM,
             lparam: LPARAM,
-        ) -> LRESULT {
+        ) -> LRESULT { unsafe {
             DefWindowProcW(hwnd, msg, wparam, lparam)
-        }
+        }}
 
         // Create and register the class.
         let wndclass = WNDCLASSEXW {
