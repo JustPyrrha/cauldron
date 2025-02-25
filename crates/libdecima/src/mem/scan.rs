@@ -24,8 +24,8 @@ pub unsafe fn scan_memory_for_types(rtti_scan_callback: fn(rtti: *const RTTI)) -
         };
         let rtti_ptr = rtti_ptr as *const c_void;
 
-        current = unsafe { rtti_ptr.add(5) };
-        let rtti = unsafe { &*(rtti_ptr as *const RTTI) };
+        current = rtti_ptr.add(5);
+        let rtti = &*(rtti_ptr as *const RTTI);
         if let Some(primitive) = as_atom(rtti) {
             let primitive = &*primitive;
             if primitive.size == 0

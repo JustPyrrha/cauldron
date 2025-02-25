@@ -192,7 +192,7 @@ pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] { 
     // This is probably 0x1000 (4096) bytes
     let page_size_bytes = {
         let mut system_info = SYSTEM_INFO::default();
-        unsafe { GetSystemInfo(&mut system_info) };
+        GetSystemInfo(&mut system_info);
         system_info.dwPageSize as usize
     };
     let page_align_mask = page_size_bytes - 1;
@@ -204,7 +204,7 @@ pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] { 
 
     let mut memory_basic_info = MEMORY_BASIC_INFORMATION::default();
     for page_addr in (first_page_addr..=last_page_addr).step_by(page_size_bytes) {
-        if unsafe { is_readable(page_addr as _, &mut memory_basic_info) } {
+        if is_readable(page_addr as _, &mut memory_basic_info) {
             continue;
         }
 

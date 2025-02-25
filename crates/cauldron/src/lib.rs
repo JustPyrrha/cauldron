@@ -419,7 +419,7 @@ impl CauldronLoader {
 
 #[macro_export]
 macro_rules! define_cauldron_plugin {
-    ($plugin:ty, $meta:expr_2021) => {
+    ($plugin:ty, $meta:expr) => {
         #[cfg(not(test))]
         mod __cauldron_plugin {
             use super::*;
@@ -458,10 +458,8 @@ pub unsafe fn handle_dll_attach() { unsafe {
     let config = load_config();
     let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
     if config.logging.show_console {
-        unsafe {
-            AllocConsole();
-            AttachConsole(ATTACH_PARENT_PROCESS);
-        }
+        AllocConsole();
+        AttachConsole(ATTACH_PARENT_PROCESS);
 
         loggers.push(simplelog::TermLogger::new(
             config.logging.console_level.to_log(),
@@ -480,39 +478,33 @@ pub unsafe fn handle_dll_attach() { unsafe {
     #[cfg(feature = "nixxes")]
     {
         Offsets::setup();
-        let log_ptr =
-            unsafe { *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap() };
-        let instance = unsafe { &*log_ptr };
-        let vftable = &unsafe { slice::from_raw_parts(instance.vtbl, 1) }[0];
+        let log_ptr = *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap();
+        let instance = &*log_ptr;
+        let vftable = &slice::from_raw_parts(instance.vtbl, 1)[0];
 
-        match unsafe { MH_Initialize() } {
+        match MH_Initialize() {
             MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
             status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
             _ => unreachable!(),
         }
 
-        let nxlogimpl_println = unsafe {
-            MhHook::new(
-                vftable.fn_println as *mut _,
-                nxlogimpl_println_impl as *mut _,
-            )
-            .unwrap()
-        };
+        let nxlogimpl_println = MhHook::new(
+            vftable.fn_println as *mut _,
+            nxlogimpl_println_impl as *mut _,
+        )
+            .unwrap();
 
-        unsafe {
-            NIXXES_PRINTLN
-                .set(std::mem::transmute(nxlogimpl_println.trampoline()))
-                .unwrap();
-        }
-        unsafe {
-            // enable all
-            MH_EnableHook(std::ptr::null_mut())
-                .ok()
-                .expect("cauldron: failed to queue enable hooks");
-            MH_ApplyQueued()
-                .ok()
-                .expect("cauldron: failed to apply queued hooks");
-        };
+        NIXXES_PRINTLN
+            .set(std::mem::transmute(nxlogimpl_println.trampoline()))
+            .unwrap();
+
+        // enable all
+        MH_EnableHook(std::ptr::null_mut())
+            .ok()
+            .expect("cauldron: failed to queue enable hooks");
+        MH_ApplyQueued()
+            .ok()
+            .expect("cauldron: failed to apply queued hooks");
     }
 
     log!("Cauldron", "Starting v{}...", env!("CARGO_PKG_VERSION"));

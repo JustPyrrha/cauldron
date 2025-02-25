@@ -149,7 +149,7 @@ impl TextureHeap {
             ptr: gpu_heap_start.ptr + (texture_index * heap_inc_size) as u64,
         };
 
-        let texture: ID3D12Resource = util::try_out_ptr(|v| unsafe {
+        let texture: ID3D12Resource = util::try_out_ptr(|v| {
             self.device.CreateCommittedResource(
                 &D3D12_HEAP_PROPERTIES {
                     Type: D3D12_HEAP_TYPE_DEFAULT,
@@ -242,7 +242,7 @@ impl TextureHeap {
         let upload_pitch = upload_row_size.div_ceil(align) * align; // 256 bytes aligned
         let upload_size = height * upload_pitch;
 
-        let upload_buffer: ID3D12Resource = util::try_out_ptr(|v| unsafe {
+        let upload_buffer: ID3D12Resource = util::try_out_ptr(|v| {
             self.device.CreateCommittedResource(
                 &D3D12_HEAP_PROPERTIES {
                     Type: D3D12_HEAP_TYPE_UPLOAD,

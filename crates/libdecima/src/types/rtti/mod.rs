@@ -219,7 +219,7 @@ pub struct RTTIPod {
 assert_size!(RTTIPod, 0x18);
 
 macro_rules! impl_inherits_rtti {
-    ($n:ident, $t:ty, $($e:expr_2021),+) => {
+    ($n:ident, $t:ty, $($e:expr),+) => {
         pub unsafe fn $n(rtti: *const RTTI) -> Option<*const $t> { unsafe {
             if !rtti.is_null() && ($((*rtti).kind == $e)||+) {
                 Some(std::mem::transmute(rtti))

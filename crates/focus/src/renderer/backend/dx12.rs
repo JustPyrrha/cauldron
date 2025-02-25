@@ -307,7 +307,7 @@ unsafe fn create_command_objects(
     ID3D12CommandAllocator,
     ID3D12GraphicsCommandList,
 )> { unsafe {
-    let device: ID3D12Device = util::try_out_ptr(|v| unsafe { command_queue.GetDevice(v) })?;
+    let device: ID3D12Device = util::try_out_ptr(|v| command_queue.GetDevice(v))?;
     let command_queue = command_queue.clone();
 
     let command_allocator: ID3D12CommandAllocator =
@@ -454,7 +454,7 @@ unsafe fn create_shader_program(
       return pow(input.color, 1.0 / 2.2) * texture0.Sample(sampler0, input.uv);
     }"#;
 
-    let vtx_shader: ID3DBlob = util::try_out_err_blob(|v, err_blob| unsafe {
+    let vtx_shader: ID3DBlob = util::try_out_err_blob(|v, err_blob| {
         D3DCompile(
             VS.as_ptr() as _,
             VS.len(),
@@ -472,7 +472,7 @@ unsafe fn create_shader_program(
     .map_err(util::print_error_blob("Compiling vertex shader"))
     .expect("D3DCompile");
 
-    let pix_shader = util::try_out_err_blob(|v, err_blob| unsafe {
+    let pix_shader = util::try_out_err_blob(|v, err_blob| {
         D3DCompile(
             PS.as_ptr() as _,
             PS.len(),
@@ -543,12 +543,12 @@ unsafe fn create_shader_program(
         ],
         DSVFormat: DXGI_FORMAT_D32_FLOAT,
         VS: D3D12_SHADER_BYTECODE {
-            pShaderBytecode: unsafe { vtx_shader.GetBufferPointer() },
-            BytecodeLength: unsafe { vtx_shader.GetBufferSize() },
+            pShaderBytecode: vtx_shader.GetBufferPointer(),
+            BytecodeLength: vtx_shader.GetBufferSize(),
         },
         PS: D3D12_SHADER_BYTECODE {
-            pShaderBytecode: unsafe { pix_shader.GetBufferPointer() },
-            BytecodeLength: unsafe { pix_shader.GetBufferSize() },
+            pShaderBytecode: pix_shader.GetBufferPointer(),
+            BytecodeLength: pix_shader.GetBufferSize(),
         },
         InputLayout: D3D12_INPUT_LAYOUT_DESC {
             pInputElementDescs: input_elements.as_ptr(),
@@ -595,7 +595,7 @@ unsafe fn create_shader_program(
         ..Default::default()
     };
 
-    let pipeline_state = unsafe { device.CreateGraphicsPipelineState(&pso_desc)? };
+    let pipeline_state = device.CreateGraphicsPipelineState(&pso_desc)?;
     let _ = ManuallyDrop::into_inner(pso_desc.pRootSignature);
 
     Ok((root_signature, pipeline_state))

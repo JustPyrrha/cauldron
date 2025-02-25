@@ -19,6 +19,7 @@ use windows_sys::{
     },
 };
 
+#[allow(non_snake_case)]
 #[unsafe(no_mangle)]
 extern "system" fn DllMain(_: isize, reason: u32, _: usize) -> bool {
     if reason == DLL_PROCESS_ATTACH {
