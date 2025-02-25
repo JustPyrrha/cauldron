@@ -3,7 +3,7 @@
 
 use crate::renderer::msg_filter::MessageFilter;
 use egui::RawInput;
-use minhook::{MH_ApplyQueued, MH_Initialize, MH_Uninitialize, MhHook, MH_STATUS};
+use minhook::{MH_ApplyQueued, MH_Initialize, MH_STATUS, MH_Uninitialize, MhHook};
 use std::cell::OnceCell;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 
@@ -88,7 +88,7 @@ impl FocusBuilder {
         mut self,
         render_loop: impl EguiRenderLoop + Send + Sync + 'static,
     ) -> Self {
-        self.0 .0.push(T::from_render_loop(render_loop));
+        self.0.0.push(T::from_render_loop(render_loop));
         self
     }
 

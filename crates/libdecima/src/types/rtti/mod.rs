@@ -301,39 +301,47 @@ impl Display for RTTIKind {
 }
 
 impl RTTICompound {
-    pub unsafe fn bases(&self) -> &[RTTIBase] { unsafe {
-        if self.num_bases > 0 {
-            slice::from_raw_parts(self.bases, self.num_bases as usize)
-        } else {
-            &[]
+    pub unsafe fn bases(&self) -> &[RTTIBase] {
+        unsafe {
+            if self.num_bases > 0 {
+                slice::from_raw_parts(self.bases, self.num_bases as usize)
+            } else {
+                &[]
+            }
         }
-    }}
+    }
 
-    pub unsafe fn attributes(&self) -> &[RTTIAttr] { unsafe {
-        if self.num_attrs > 0 {
-            slice::from_raw_parts(self.attrs, self.num_attrs as usize)
-        } else {
-            &[]
+    pub unsafe fn attributes(&self) -> &[RTTIAttr] {
+        unsafe {
+            if self.num_attrs > 0 {
+                slice::from_raw_parts(self.attrs, self.num_attrs as usize)
+            } else {
+                &[]
+            }
         }
-    }}
+    }
 
-    pub unsafe fn message_handlers(&self) -> &[RTTIMessageHandler] { unsafe {
-        if self.num_message_handlers > 0 {
-            slice::from_raw_parts(self.message_handlers, self.num_message_handlers as usize)
-        } else {
-            &[]
+    pub unsafe fn message_handlers(&self) -> &[RTTIMessageHandler] {
+        unsafe {
+            if self.num_message_handlers > 0 {
+                slice::from_raw_parts(self.message_handlers, self.num_message_handlers as usize)
+            } else {
+                &[]
+            }
         }
-    }}
+    }
 }
 
 impl RTTIEnum {
-    pub unsafe fn values(&self) -> &[RTTIValue] { unsafe {
-        if self.num_values > 0 {
-            slice::from_raw_parts(self.values, self.num_values as usize)
-        } else {
-            &[]
+    pub unsafe fn values(&self) -> &[RTTIValue] {
+        unsafe {
+            if self.num_values > 0 {
+                slice::from_raw_parts(self.values, self.num_values as usize)
+            } else {
+                &[]
+            }
         }
-    }}
+    }
 }
 
 impl RTTIValue {

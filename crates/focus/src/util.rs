@@ -6,21 +6,21 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D::ID3DBlob;
 use windows::Win32::Graphics::Direct3D12::{
-    D3D12GetDebugInterface, ID3D12Debug6, ID3D12Device, ID3D12Fence, ID3D12Resource,
     D3D12_FENCE_FLAG_NONE, D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0,
     D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAG_NONE,
     D3D12_RESOURCE_BARRIER_TYPE_TRANSITION, D3D12_RESOURCE_STATES,
-    D3D12_RESOURCE_TRANSITION_BARRIER,
+    D3D12_RESOURCE_TRANSITION_BARRIER, D3D12GetDebugInterface, ID3D12Debug6, ID3D12Device,
+    ID3D12Fence, ID3D12Resource,
 };
 use windows::Win32::Graphics::Dxgi::{
-    DXGIGetDebugInterface1, IDXGIInfoQueue, DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE,
+    DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE, DXGIGetDebugInterface1, IDXGIInfoQueue,
 };
 use windows::Win32::System::Memory::{
-    VirtualQuery, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
-    PAGE_PROTECTION_FLAGS, PAGE_READONLY, PAGE_READWRITE,
+    MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS,
+    PAGE_READONLY, PAGE_READWRITE, VirtualQuery,
 };
 use windows::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
-use windows::Win32::System::Threading::{CreateEventExW, WaitForSingleObjectEx, CREATE_EVENT};
+use windows::Win32::System::Threading::{CREATE_EVENT, CreateEventExW, WaitForSingleObjectEx};
 
 /// Wrapper around [`windows::Win32::Graphics::Direct3D12::ID3D12Fence`].
 pub struct Fence {
@@ -168,60 +168,62 @@ pub fn print_dxgi_debug_messages() {
     unsafe { diq.ClearStoredMessages(DXGI_DEBUG_ALL) };
 }
 
-pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] { unsafe {
-    //Check if the page pointed to by `ptr.rs` is readable.
-    unsafe fn is_readable(
-        ptr: *const c_void,
-        memory_basic_info: &mut MEMORY_BASIC_INFORMATION,
-    ) -> bool {
-        // If the page protection has any of these flags set, we can read from it
-        const PAGE_READABLE: PAGE_PROTECTION_FLAGS = PAGE_PROTECTION_FLAGS(
-            PAGE_READONLY.0 | PAGE_READWRITE.0 | PAGE_EXECUTE_READ.0 | PAGE_EXECUTE_READWRITE.0,
-        );
+pub unsafe fn readable_region<T>(ptr: *const T, limit: usize) -> &'static [T] {
+    unsafe {
+        //Check if the page pointed to by `ptr.rs` is readable.
+        unsafe fn is_readable(
+            ptr: *const c_void,
+            memory_basic_info: &mut MEMORY_BASIC_INFORMATION,
+        ) -> bool {
+            // If the page protection has any of these flags set, we can read from it
+            const PAGE_READABLE: PAGE_PROTECTION_FLAGS = PAGE_PROTECTION_FLAGS(
+                PAGE_READONLY.0 | PAGE_READWRITE.0 | PAGE_EXECUTE_READ.0 | PAGE_EXECUTE_READWRITE.0,
+            );
 
-        (unsafe {
-            VirtualQuery(
-                Some(ptr),
-                memory_basic_info,
-                size_of::<MEMORY_BASIC_INFORMATION>(),
-            )
-        } != 0)
-            && (memory_basic_info.Protect & PAGE_READABLE).0 != 0
-    }
-
-    // This is probably 0x1000 (4096) bytes
-    let page_size_bytes = {
-        let mut system_info = SYSTEM_INFO::default();
-        GetSystemInfo(&mut system_info);
-        system_info.dwPageSize as usize
-    };
-    let page_align_mask = page_size_bytes - 1;
-
-    // Calculate the starting address of the first and last pages that need to be
-    // readable in order to read `limit` elements of type `T` from `ptr.rs`
-    let first_page_addr = (ptr as usize) & !page_align_mask;
-    let last_page_addr = (ptr as usize + (limit * size_of::<T>()) - 1) & !page_align_mask;
-
-    let mut memory_basic_info = MEMORY_BASIC_INFORMATION::default();
-    for page_addr in (first_page_addr..=last_page_addr).step_by(page_size_bytes) {
-        if is_readable(page_addr as _, &mut memory_basic_info) {
-            continue;
+            (unsafe {
+                VirtualQuery(
+                    Some(ptr),
+                    memory_basic_info,
+                    size_of::<MEMORY_BASIC_INFORMATION>(),
+                )
+            } != 0)
+                && (memory_basic_info.Protect & PAGE_READABLE).0 != 0
         }
 
-        // If this page is not readable, we can read from `ptr.rs`
-        // up to (not including) the start of this page
-        //
-        // Note: `page_addr` can be less than `ptr.rs` if `ptr.rs` is not page-aligned
-        let num_readable = page_addr.saturating_sub(ptr as usize) / size_of::<T>();
+        // This is probably 0x1000 (4096) bytes
+        let page_size_bytes = {
+            let mut system_info = SYSTEM_INFO::default();
+            GetSystemInfo(&mut system_info);
+            system_info.dwPageSize as usize
+        };
+        let page_align_mask = page_size_bytes - 1;
+
+        // Calculate the starting address of the first and last pages that need to be
+        // readable in order to read `limit` elements of type `T` from `ptr.rs`
+        let first_page_addr = (ptr as usize) & !page_align_mask;
+        let last_page_addr = (ptr as usize + (limit * size_of::<T>()) - 1) & !page_align_mask;
+
+        let mut memory_basic_info = MEMORY_BASIC_INFORMATION::default();
+        for page_addr in (first_page_addr..=last_page_addr).step_by(page_size_bytes) {
+            if is_readable(page_addr as _, &mut memory_basic_info) {
+                continue;
+            }
+
+            // If this page is not readable, we can read from `ptr.rs`
+            // up to (not including) the start of this page
+            //
+            // Note: `page_addr` can be less than `ptr.rs` if `ptr.rs` is not page-aligned
+            let num_readable = page_addr.saturating_sub(ptr as usize) / size_of::<T>();
+
+            // SAFETY:
+            // - `ptr.rs` is a valid pointer to `limit` elements of type `T`
+            // - `num_readable` is always less than or equal to `limit`
+            return std::slice::from_raw_parts(ptr, num_readable);
+        }
 
         // SAFETY:
-        // - `ptr.rs` is a valid pointer to `limit` elements of type `T`
-        // - `num_readable` is always less than or equal to `limit`
-        return std::slice::from_raw_parts(ptr, num_readable);
+        // - `ptr.rs` is a valid pointer to `limit` elements of type `T` and is properly
+        //   aligned
+        std::slice::from_raw_parts(ptr, limit)
     }
-
-    // SAFETY:
-    // - `ptr.rs` is a valid pointer to `limit` elements of type `T` and is properly
-    //   aligned
-    std::slice::from_raw_parts(ptr, limit)
-}}
+}

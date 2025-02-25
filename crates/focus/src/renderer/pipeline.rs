@@ -1,8 +1,8 @@
-use crate::renderer::backend::dx12::{split_output, D3D12RenderEngine};
+use crate::EguiRenderLoop;
+use crate::renderer::RenderEngine;
+use crate::renderer::backend::dx12::{D3D12RenderEngine, split_output};
 use crate::renderer::input::{collect_input, process_input};
 use crate::renderer::msg_filter::MessageFilter;
-use crate::renderer::RenderEngine;
-use crate::EguiRenderLoop;
 use egui::{Context, Event, RawInput};
 use log::error;
 use once_cell::unsync::Lazy;
@@ -11,16 +11,16 @@ use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Instant;
-use windows::core::{Error, Result};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, SetWindowLongPtrW, GWLP_WNDPROC,
+    CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetWindowLongPtrW,
 };
+use windows::core::{Error, Result};
 
 type RenderLoop = Box<dyn EguiRenderLoop + Send + Sync>;
 pub type FnWndProc =
@@ -141,51 +141,53 @@ unsafe extern "system" fn pipeline_wnd_proc(
     msg: u32,
     wparam: usize,
     lparam: isize,
-) -> LRESULT { unsafe {
-    let shared_state = {
-        let Some(guard) = PIPELINE_STATES.try_lock() else {
-            error!("Could not lock shared state in window procedure");
-            return DefWindowProcW(
-                HWND(hwnd as *mut c_void),
-                msg,
-                WPARAM(wparam),
-                LPARAM(lparam),
-            );
+) -> LRESULT {
+    unsafe {
+        let shared_state = {
+            let Some(guard) = PIPELINE_STATES.try_lock() else {
+                error!("Could not lock shared state in window procedure");
+                return DefWindowProcW(
+                    HWND(hwnd as *mut c_void),
+                    msg,
+                    WPARAM(wparam),
+                    LPARAM(lparam),
+                );
+            };
+
+            let Some(shared_state) = guard.get(&hwnd) else {
+                error!("Could not get shared state for handle {hwnd:?}");
+                return DefWindowProcW(
+                    HWND(hwnd as *mut c_void),
+                    msg,
+                    WPARAM(wparam),
+                    LPARAM(lparam),
+                );
+            };
+            Arc::clone(shared_state)
         };
 
-        let Some(shared_state) = guard.get(&hwnd) else {
-            error!("Could not get shared state for handle {hwnd:?}");
-            return DefWindowProcW(
-                HWND(hwnd as *mut c_void),
-                msg,
-                WPARAM(wparam),
-                LPARAM(lparam),
-            );
-        };
-        Arc::clone(shared_state)
-    };
-
-    if let Err(e) = shared_state.tx.send(PipelineMessage(
-        HWND(hwnd as *mut c_void),
-        msg,
-        WPARAM(wparam),
-        LPARAM(lparam),
-    )) {
-        error!("Could not send window message through pipeline: {e:?}");
-    }
-
-    let message_filter =
-        MessageFilter::from_bits_retain(shared_state.message_filter.load(Ordering::SeqCst));
-
-    if message_filter.is_blocking(msg) {
-        LRESULT(1)
-    } else {
-        CallWindowProcW(
-            Some(shared_state.wnd_proc),
+        if let Err(e) = shared_state.tx.send(PipelineMessage(
             HWND(hwnd as *mut c_void),
             msg,
             WPARAM(wparam),
             LPARAM(lparam),
-        )
+        )) {
+            error!("Could not send window message through pipeline: {e:?}");
+        }
+
+        let message_filter =
+            MessageFilter::from_bits_retain(shared_state.message_filter.load(Ordering::SeqCst));
+
+        if message_filter.is_blocking(msg) {
+            LRESULT(1)
+        } else {
+            CallWindowProcW(
+                Some(shared_state.wnd_proc),
+                HWND(hwnd as *mut c_void),
+                msg,
+                WPARAM(wparam),
+                LPARAM(lparam),
+            )
+        }
     }
-}}
+}

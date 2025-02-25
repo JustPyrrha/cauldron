@@ -1,12 +1,12 @@
 use log::debug;
 use std::mem;
-use windows::core::w;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, RegisterClassExW, CS_HREDRAW, CS_VREDRAW, WNDCLASSEXW,
+    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, RegisterClassExW, WNDCLASSEXW,
     WS_EX_OVERLAPPEDWINDOW, WS_OVERLAPPEDWINDOW,
 };
+use windows::core::w;
 
 pub mod dx12;
 
@@ -32,9 +32,9 @@ impl DummyHwnd {
             msg: u32,
             wparam: WPARAM,
             lparam: LPARAM,
-        ) -> LRESULT { unsafe {
-            DefWindowProcW(hwnd, msg, wparam, lparam)
-        }}
+        ) -> LRESULT {
+            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
 
         // Create and register the class.
         let wndclass = WNDCLASSEXW {

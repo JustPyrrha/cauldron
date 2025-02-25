@@ -5,7 +5,6 @@ use once_cell::sync::OnceCell;
 use paste::paste;
 use std::{mem::transmute, path::PathBuf, thread};
 use windows_sys::{
-    core::{s, PCSTR, PCWSTR, PSTR, PWSTR},
     Win32::{
         Foundation::MAX_PATH,
         Storage::FileSystem::{
@@ -17,6 +16,7 @@ use windows_sys::{
             SystemServices::DLL_PROCESS_ATTACH,
         },
     },
+    core::{PCSTR, PCWSTR, PSTR, PWSTR, s},
 };
 
 #[allow(non_snake_case)]

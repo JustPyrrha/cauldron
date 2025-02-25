@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::env::current_exe;
 use std::ptr;
-use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Storage::FileSystem::{
-    GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW, VS_FIXEDFILEINFO,
+    GetFileVersionInfoSizeW, GetFileVersionInfoW, VS_FIXEDFILEINFO, VerQueryValueW,
 };
+use windows::core::{HSTRING, PCWSTR, w};
 
 #[derive(Debug, Copy, Clone)]
 pub struct GameVersion {

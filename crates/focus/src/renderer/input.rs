@@ -1,6 +1,6 @@
 use crate::renderer::pipeline::Pipeline;
 use egui::{Event, Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, RawInput, Rect, Vec2};
-use std::ffi::{c_void, CStr};
+use std::ffi::{CStr, c_void};
 use windows::Wdk::System::SystemInformation::NtQuerySystemTime;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{

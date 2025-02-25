@@ -18,7 +18,7 @@ use libdecima::log;
 use libdecima::mem::offsets::Offsets;
 use libdecima::types::nixxes::log::NxLogImpl;
 use libdecima::types::rtti::cstr_to_string;
-use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MhHook, MH_STATUS};
+use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MH_STATUS, MhHook};
 use once_cell::sync::OnceCell;
 use semver::{Version, VersionReq};
 use simplelog::{ColorChoice, Config, SharedLogger, TerminalMode};
@@ -30,7 +30,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::{fs, slice};
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK};
-use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
+use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AllocConsole, AttachConsole};
 
 pub trait CauldronPlugin {
     fn new() -> Self
@@ -109,69 +109,71 @@ impl CauldronLoader {
         paths
     }
 
-    unsafe fn try_load_plugin(&mut self, plugin_path: &PathBuf) { unsafe {
-        let handle = libloading::Library::new(&plugin_path);
-        let Ok(handle) = handle else {
-            log!(
-                "Cauldron",
-                "Failed to load plugin: {}",
-                plugin_path.display()
-            );
-            return;
-        };
-        let metadata =
-            handle.get::<extern "C" fn() -> &'static str>(b"__cauldron_plugin__metadata\0");
-        let Ok(metadata) = metadata else {
-            log!(
-                "Cauldron",
-                "Not a valid plugin (missing metadata export): {}",
-                plugin_path.display()
-            );
-            return;
-        };
-        let plugin = handle.get::<extern "C" fn() -> PluginBox>(b"__cauldron_plugin__new\0");
-        let Ok(plugin) = plugin else {
-            log!(
-                "Cauldron",
-                "Not a valid plugin (missing create instance export): {}",
-                plugin_path.display()
-            );
-            return;
-        };
-        let metadata_str = metadata();
-        let metadata = toml::from_str::<PluginMetadataSchemaVersionOnly>(metadata_str);
-        let Ok(metadata) = metadata else {
-            log!(
-                "Cauldron",
-                "Failed to parse plugin metadata: {}",
-                plugin_path.display()
-            );
-            return;
-        };
-        let metadata = match metadata.schema_version {
-            0 => toml::from_str::<PluginMetadataV0>(metadata_str),
-            // when adding new plugin meta versions, do migrations from old to new here.
-            _ => {
+    unsafe fn try_load_plugin(&mut self, plugin_path: &PathBuf) {
+        unsafe {
+            let handle = libloading::Library::new(&plugin_path);
+            let Ok(handle) = handle else {
+                log!(
+                    "Cauldron",
+                    "Failed to load plugin: {}",
+                    plugin_path.display()
+                );
                 return;
-            }
-        };
-        let Ok(metadata) = metadata else {
-            log!(
-                "Cauldron",
-                "Failed to parse plugin metadata: {}",
-                plugin_path.display()
-            );
-            return;
-        };
-        let plugin = plugin();
-        self.plugins.push(PluginContainer {
-            plugin,
-            handle,
-            metadata,
-        });
+            };
+            let metadata =
+                handle.get::<extern "C" fn() -> &'static str>(b"__cauldron_plugin__metadata\0");
+            let Ok(metadata) = metadata else {
+                log!(
+                    "Cauldron",
+                    "Not a valid plugin (missing metadata export): {}",
+                    plugin_path.display()
+                );
+                return;
+            };
+            let plugin = handle.get::<extern "C" fn() -> PluginBox>(b"__cauldron_plugin__new\0");
+            let Ok(plugin) = plugin else {
+                log!(
+                    "Cauldron",
+                    "Not a valid plugin (missing create instance export): {}",
+                    plugin_path.display()
+                );
+                return;
+            };
+            let metadata_str = metadata();
+            let metadata = toml::from_str::<PluginMetadataSchemaVersionOnly>(metadata_str);
+            let Ok(metadata) = metadata else {
+                log!(
+                    "Cauldron",
+                    "Failed to parse plugin metadata: {}",
+                    plugin_path.display()
+                );
+                return;
+            };
+            let metadata = match metadata.schema_version {
+                0 => toml::from_str::<PluginMetadataV0>(metadata_str),
+                // when adding new plugin meta versions, do migrations from old to new here.
+                _ => {
+                    return;
+                }
+            };
+            let Ok(metadata) = metadata else {
+                log!(
+                    "Cauldron",
+                    "Failed to parse plugin metadata: {}",
+                    plugin_path.display()
+                );
+                return;
+            };
+            let plugin = plugin();
+            self.plugins.push(PluginContainer {
+                plugin,
+                handle,
+                metadata,
+            });
 
-        self.sort_and_validate_plugins();
-    }}
+            self.sort_and_validate_plugins();
+        }
+    }
 
     fn sort_and_validate_plugins(&mut self) {
         self.plugins.sort_by(|a, b| {
@@ -446,97 +448,101 @@ static NIXXES_PRINTLN: OnceCell<unsafe extern "C" fn(*mut NxLogImpl, *const c_ch
     OnceCell::new();
 
 #[cfg(feature = "nixxes")]
-unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) { unsafe {
-    // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
-    ::log::info!("{}", cstr_to_string(text).split_at(26).1);
+unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
+    unsafe {
+        // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
+        ::log::info!("{}", cstr_to_string(text).split_at(26).1);
 
-    (NIXXES_PRINTLN.get().unwrap())(this, text)
-}}
+        (NIXXES_PRINTLN.get().unwrap())(this, text)
+    }
+}
 
 #[doc(hidden)]
-pub unsafe fn handle_dll_attach() { unsafe {
-    let config = load_config();
-    let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
-    if config.logging.show_console {
-        AllocConsole();
-        AttachConsole(ATTACH_PARENT_PROCESS);
+pub unsafe fn handle_dll_attach() {
+    unsafe {
+        let config = load_config();
+        let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
+        if config.logging.show_console {
+            AllocConsole();
+            AttachConsole(ATTACH_PARENT_PROCESS);
 
-        loggers.push(simplelog::TermLogger::new(
-            config.logging.console_level.to_log(),
+            loggers.push(simplelog::TermLogger::new(
+                config.logging.console_level.to_log(),
+                Config::default(),
+                TerminalMode::Mixed,
+                ColorChoice::Auto,
+            ))
+        }
+        loggers.push(simplelog::WriteLogger::new(
+            config.logging.file_level.to_log(),
             Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        ))
-    }
-    loggers.push(simplelog::WriteLogger::new(
-        config.logging.file_level.to_log(),
-        Config::default(),
-        File::create(config.logging.file_path).unwrap(),
-    ));
-    simplelog::CombinedLogger::init(loggers).unwrap();
+            File::create(config.logging.file_path).unwrap(),
+        ));
+        simplelog::CombinedLogger::init(loggers).unwrap();
 
-    #[cfg(feature = "nixxes")]
-    {
-        Offsets::setup();
-        let log_ptr = *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap();
-        let instance = &*log_ptr;
-        let vftable = &slice::from_raw_parts(instance.vtbl, 1)[0];
+        #[cfg(feature = "nixxes")]
+        {
+            Offsets::setup();
+            let log_ptr = *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap();
+            let instance = &*log_ptr;
+            let vftable = &slice::from_raw_parts(instance.vtbl, 1)[0];
 
-        match MH_Initialize() {
-            MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
-            status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
-            _ => unreachable!(),
-        }
+            match MH_Initialize() {
+                MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
+                status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
+                _ => unreachable!(),
+            }
 
-        let nxlogimpl_println = MhHook::new(
-            vftable.fn_println as *mut _,
-            nxlogimpl_println_impl as *mut _,
-        )
+            let nxlogimpl_println = MhHook::new(
+                vftable.fn_println as *mut _,
+                nxlogimpl_println_impl as *mut _,
+            )
             .unwrap();
 
-        NIXXES_PRINTLN
-            .set(std::mem::transmute(nxlogimpl_println.trampoline()))
-            .unwrap();
+            NIXXES_PRINTLN
+                .set(std::mem::transmute(nxlogimpl_println.trampoline()))
+                .unwrap();
 
-        // enable all
-        MH_EnableHook(std::ptr::null_mut())
-            .ok()
-            .expect("cauldron: failed to queue enable hooks");
-        MH_ApplyQueued()
-            .ok()
-            .expect("cauldron: failed to apply queued hooks");
-    }
-
-    log!("Cauldron", "Starting v{}...", env!("CARGO_PKG_VERSION"));
-
-    if CauldronGameType::find_from_exe().is_none() {
-        log!(
-            "Cauldron",
-            "Unknown game type \"{}\", exiting.",
-            current_exe()
-                .unwrap()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-        );
-        message_box(
-            "Game Unknown",
-            "Cauldron as detected an unknown game type and will now exit.",
-            MB_OK | MB_ICONERROR,
-        );
-        std::process::exit(0);
-    }
-
-    #[allow(static_mut_refs)]
-    INSTANCE.get_or_init(|| {
-        let mut instance = CauldronLoader::new();
-        let paths = instance.try_find_plugins();
-        for path in paths {
-            instance.try_load_plugin(&path);
+            // enable all
+            MH_EnableHook(std::ptr::null_mut())
+                .ok()
+                .expect("cauldron: failed to queue enable hooks");
+            MH_ApplyQueued()
+                .ok()
+                .expect("cauldron: failed to apply queued hooks");
         }
-        instance.do_plugin_init();
 
-        instance
-    });
-}}
+        log!("Cauldron", "Starting v{}...", env!("CARGO_PKG_VERSION"));
+
+        if CauldronGameType::find_from_exe().is_none() {
+            log!(
+                "Cauldron",
+                "Unknown game type \"{}\", exiting.",
+                current_exe()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            );
+            message_box(
+                "Game Unknown",
+                "Cauldron as detected an unknown game type and will now exit.",
+                MB_OK | MB_ICONERROR,
+            );
+            std::process::exit(0);
+        }
+
+        #[allow(static_mut_refs)]
+        INSTANCE.get_or_init(|| {
+            let mut instance = CauldronLoader::new();
+            let paths = instance.try_find_plugins();
+            for path in paths {
+                instance.try_load_plugin(&path);
+            }
+            instance.do_plugin_init();
+
+            instance
+        });
+    }
+}

@@ -1,4 +1,4 @@
-use cauldron::{define_cauldron_plugin, CauldronLoader, CauldronPlugin};
+use cauldron::{CauldronLoader, CauldronPlugin, define_cauldron_plugin};
 use libdecima::log;
 
 pub struct LegacyCauldron {}
