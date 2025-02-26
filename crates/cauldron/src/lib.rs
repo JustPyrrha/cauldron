@@ -17,7 +17,6 @@ use crate::version::{CauldronGameType, GameVersion};
 use libdecima::log;
 use libdecima::mem::offsets::Offsets;
 use libdecima::types::nixxes::log::NxLogImpl;
-use libdecima::types::rtti::cstr_to_string;
 use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MH_STATUS, MhHook};
 use once_cell::sync::OnceCell;
 use semver::{Version, VersionReq};
@@ -25,7 +24,7 @@ use simplelog::{ColorChoice, Config, SharedLogger, TerminalMode};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env::{current_dir, current_exe};
-use std::ffi::c_char;
+use std::ffi::{CStr, c_char};
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
@@ -451,7 +450,9 @@ static NIXXES_PRINTLN: OnceCell<unsafe extern "C" fn(*mut NxLogImpl, *const c_ch
 unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
     unsafe {
         // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
-        ::log::info!("{}", cstr_to_string(text).split_at(26).1);
+        let cstr = CStr::from_ptr(text);
+        let log_line = cstr.to_string_lossy().to_string();
+        ::log::info!("{}", if log_line.starts_with("---") { log_line.as_str() } else { log_line.split_at(26).1 });
 
         (NIXXES_PRINTLN.get().unwrap())(this, text)
     }
