@@ -1,18 +1,14 @@
-//! This module contains logic for filtering windows messages.
-
 use bitflags::bitflags;
-use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::Win32::UI::WindowsAndMessaging::{
+    WM_ACTIVATE, WM_ACTIVATEAPP, WM_APP, WM_CLOSE, WM_ENABLE, WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE,
+    WM_GETMINMAXINFO, WM_INPUT, WM_KEYFIRST, WM_KEYLAST, WM_KILLFOCUS, WM_MOUSEACTIVATE,
+    WM_MOUSEFIRST, WM_MOUSELAST, WM_MOVE, WM_MOVING, WM_SETFOCUS, WM_SHOWWINDOW, WM_SIZE,
+    WM_SIZING, WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING,
+};
 
 bitflags! {
-    /// Bitflag for specifying types of window message to be filtered.
-    ///
-    /// Return this on
-    /// to filter certain types of window message.
-    ///
-    /// You can use bitwise-or to combine multiple flags.
-    ///
-    #[repr(transparent)]
-    pub struct MessageFilter: u32 {
+    #[repr(C)]
+    pub struct MessageFilter : u32 {
         /// Blocks keyboard input event messages.
         const InputKeyboard = 1u32 << 0;
         /// Blocks mouse input event message.
@@ -49,8 +45,7 @@ bitflags! {
 }
 
 impl MessageFilter {
-    /// Check whether the message ID is blocked by this filter
-    pub(crate) fn is_blocking(&self, message_id: u32) -> bool {
+    pub fn is_blocking(&self, message_id: u32) -> bool {
         if match message_id {
             0x0000..=0x03FF => self.contains(Self::RangeSystemDefined),
             WM_USER..=0x7FFF => self.contains(Self::RangePrivateReserved),

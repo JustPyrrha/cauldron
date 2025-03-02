@@ -1,17 +1,36 @@
-use crate::util;
-use crate::util::Fence;
+use crate::egui_d3d12::fence::Fence;
+use crate::egui_d3d12::util::{create_barrier, drop_barrier, try_out_ptr};
 use egui::{Color32, ImageData, TextureId, TexturesDelta};
-use log::{error, warn};
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::ptr;
-use windows::Win32::Graphics::Direct3D12::*;
-use windows::Win32::Graphics::Dxgi::Common::*;
+use windows::Win32::Graphics::Direct3D12::{
+    D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_QUEUE_DESC, D3D12_COMMAND_QUEUE_FLAG_NONE,
+    D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+    D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING, D3D12_DESCRIPTOR_HEAP_DESC,
+    D3D12_DESCRIPTOR_HEAP_FLAG_NONE, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+    D3D12_GPU_DESCRIPTOR_HANDLE, D3D12_HEAP_FLAG_NONE, D3D12_HEAP_PROPERTIES,
+    D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_TYPE_UPLOAD, D3D12_MEMORY_POOL_UNKNOWN,
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT, D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_BUFFER,
+    D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST,
+    D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+    D3D12_SHADER_RESOURCE_VIEW_DESC, D3D12_SHADER_RESOURCE_VIEW_DESC_0,
+    D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_SUBRESOURCE_FOOTPRINT, D3D12_TEX2D_SRV,
+    D3D12_TEXTURE_COPY_LOCATION, D3D12_TEXTURE_COPY_LOCATION_0,
+    D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+    D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+    D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12CommandAllocator, ID3D12CommandQueue, ID3D12DescriptorHeap,
+    ID3D12Device, ID3D12GraphicsCommandList, ID3D12Resource,
+};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_UNKNOWN,
+    DXGI_SAMPLE_DESC,
+};
 use windows::core::{Error, HRESULT, Interface, Result, w};
 
 pub struct Texture {
     pub resource: ID3D12Resource,
-    pub gpu_desc: D3D12_GPU_DESCRIPTOR_HANDLE,
+    pub gpu_descriptor: D3D12_GPU_DESCRIPTOR_HANDLE,
     pub width: u32,
     pub height: u32,
 }
@@ -20,37 +39,37 @@ pub struct TextureHeap {
     pub device: ID3D12Device,
     pub srv_staging_heap: ID3D12DescriptorHeap,
     pub srv_heap: ID3D12DescriptorHeap,
+
     pub textures: HashMap<TextureId, Texture>,
+
     pub command_queue: ID3D12CommandQueue,
     pub command_allocator: ID3D12CommandAllocator,
     pub command_list: ID3D12GraphicsCommandList,
+
     pub fence: Fence,
 }
 
 impl TextureHeap {
-    pub fn new(
-        device: &ID3D12Device,
-        srv_heap: ID3D12DescriptorHeap,
-    ) -> windows::core::Result<Self> {
+    pub fn new(device: &ID3D12Device, srv_heap: ID3D12DescriptorHeap) -> Result<Self> {
         let command_queue = unsafe {
             device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
                 Type: D3D12_COMMAND_LIST_TYPE_DIRECT,
                 Priority: 0,
                 Flags: D3D12_COMMAND_QUEUE_FLAG_NONE,
                 NodeMask: 0,
-            })
-        }?;
+            })?
+        };
 
         let command_allocator: ID3D12CommandAllocator =
-            unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT) }?;
+            unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)? };
         let command_list: ID3D12GraphicsCommandList = unsafe {
-            device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &command_allocator, None)
-        }?;
+            device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &command_allocator, None)?
+        };
 
         unsafe {
             command_list.Close()?;
-            command_allocator.SetName(w!("sunwing::focus render engine command allocator"))?;
-            command_list.SetName(w!("sunwing::focus render engine command list"))?;
+            command_allocator.SetName(w!("cauldron::focus::egui_d3d12 allocator"))?;
+            command_list.SetName(w!("cauldron::focus::egui_d3d12 list"))?;
         }
 
         let srv_staging_heap: ID3D12DescriptorHeap = unsafe {
@@ -59,8 +78,8 @@ impl TextureHeap {
                 NumDescriptors: 8,
                 Flags: D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
                 NodeMask: 0,
-            })
-        }?;
+            })?
+        };
 
         let fence = Fence::new(&device)?;
 
@@ -78,25 +97,27 @@ impl TextureHeap {
 
     unsafe fn resize_heap(&mut self) -> Result<()> {
         unsafe {
-            let mut desc = self.srv_heap.GetDesc();
-            let mut desc_staging = self.srv_staging_heap.GetDesc();
-            let old_num_descriptors = desc.NumDescriptors;
+            let mut heap_desc = self.srv_heap.GetDesc();
+            let mut staging_heap_desc = self.srv_staging_heap.GetDesc();
+            let old_desc_num = heap_desc.NumDescriptors;
 
-            if old_num_descriptors <= self.textures.len() as _ {
-                desc.NumDescriptors *= 2;
-                desc_staging.NumDescriptors = desc.NumDescriptors;
+            if old_desc_num <= self.textures.len() as _ {
+                heap_desc.NumDescriptors *= 2;
+                staging_heap_desc.NumDescriptors = heap_desc.NumDescriptors;
 
-                let srv_heap: ID3D12DescriptorHeap = self.device.CreateDescriptorHeap(&desc)?;
+                let srv_heap: ID3D12DescriptorHeap =
+                    self.device.CreateDescriptorHeap(&heap_desc)?;
                 let srv_staging_heap: ID3D12DescriptorHeap =
-                    self.device.CreateDescriptorHeap(&desc_staging)?;
+                    self.device.CreateDescriptorHeap(&staging_heap_desc)?;
+
                 self.device.CopyDescriptorsSimple(
-                    old_num_descriptors,
+                    old_desc_num,
                     srv_staging_heap.GetCPUDescriptorHandleForHeapStart(),
                     self.srv_heap.GetCPUDescriptorHandleForHeapStart(),
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
                 );
                 self.device.CopyDescriptorsSimple(
-                    old_num_descriptors,
+                    old_desc_num,
                     srv_heap.GetCPUDescriptorHandleForHeapStart(),
                     self.srv_heap.GetCPUDescriptorHandleForHeapStart(),
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -112,9 +133,9 @@ impl TextureHeap {
             self.textures
                 .iter_mut()
                 .enumerate()
-                .for_each(|(idx, (_tid, texture))| {
-                    texture.gpu_desc = D3D12_GPU_DESCRIPTOR_HANDLE {
-                        ptr: gpu_heap_start.ptr + (idx as u32 * heap_inc_size) as u64,
+                .for_each(|(index, (_, texture))| {
+                    texture.gpu_descriptor = D3D12_GPU_DESCRIPTOR_HANDLE {
+                        ptr: gpu_heap_start.ptr + (index as u32 * heap_inc_size) as u64,
                     }
                 });
 
@@ -124,14 +145,14 @@ impl TextureHeap {
 
     unsafe fn create_texture(
         &mut self,
-        tid: TextureId,
+        texture_id: TextureId,
         width: u32,
         height: u32,
     ) -> Result<TextureId> {
         unsafe {
             self.resize_heap()?;
 
-            let cpu_heap_stg_start = self.srv_staging_heap.GetCPUDescriptorHandleForHeapStart();
+            let cpu_staging_heap_start = self.srv_staging_heap.GetCPUDescriptorHandleForHeapStart();
             let cpu_heap_start = self.srv_heap.GetCPUDescriptorHandleForHeapStart();
             let gpu_heap_start = self.srv_heap.GetGPUDescriptorHandleForHeapStart();
             let heap_inc_size = self
@@ -139,20 +160,17 @@ impl TextureHeap {
                 .GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
             let texture_index = self.textures.len() as u32;
-
-            let cpu_desc_stg = D3D12_CPU_DESCRIPTOR_HANDLE {
-                ptr: cpu_heap_stg_start.ptr + (texture_index * heap_inc_size) as usize,
+            let cpu_staging_descriptor = D3D12_CPU_DESCRIPTOR_HANDLE {
+                ptr: cpu_staging_heap_start.ptr + (texture_index * heap_inc_size) as usize,
             };
-
-            let cpu_desc = D3D12_CPU_DESCRIPTOR_HANDLE {
+            let cpu_descriptor = D3D12_CPU_DESCRIPTOR_HANDLE {
                 ptr: cpu_heap_start.ptr + (texture_index * heap_inc_size) as usize,
             };
-
-            let gpu_desc = D3D12_GPU_DESCRIPTOR_HANDLE {
+            let gpu_descriptor = D3D12_GPU_DESCRIPTOR_HANDLE {
                 ptr: gpu_heap_start.ptr + (texture_index * heap_inc_size) as u64,
             };
 
-            let texture: ID3D12Resource = util::try_out_ptr(|v| {
+            let texture: ID3D12Resource = try_out_ptr(|resource| {
                 self.device.CreateCommittedResource(
                     &D3D12_HEAP_PROPERTIES {
                         Type: D3D12_HEAP_TYPE_DEFAULT,
@@ -169,7 +187,7 @@ impl TextureHeap {
                         Height: height as _,
                         DepthOrArraySize: 1,
                         MipLevels: 1,
-                        Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                        Format: DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
                         SampleDesc: DXGI_SAMPLE_DESC {
                             Count: 1,
                             Quality: 0,
@@ -179,14 +197,14 @@ impl TextureHeap {
                     },
                     D3D12_RESOURCE_STATE_COPY_DEST,
                     None,
-                    v,
+                    resource,
                 )
             })?;
 
             self.device.CreateShaderResourceView(
                 &texture,
                 Some(&D3D12_SHADER_RESOURCE_VIEW_DESC {
-                    Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                    Format: DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
                     ViewDimension: D3D12_SRV_DIMENSION_TEXTURE2D,
                     Shader4ComponentMapping: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
                     Anonymous: D3D12_SHADER_RESOURCE_VIEW_DESC_0 {
@@ -198,27 +216,27 @@ impl TextureHeap {
                         },
                     },
                 }),
-                cpu_desc_stg,
+                cpu_staging_descriptor,
             );
 
             self.device.CopyDescriptorsSimple(
                 1,
-                cpu_desc,
-                cpu_desc_stg,
+                cpu_descriptor,
+                cpu_staging_descriptor,
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
             );
 
             self.textures.insert(
-                tid,
+                texture_id,
                 Texture {
                     resource: texture,
-                    gpu_desc,
+                    gpu_descriptor,
                     width,
                     height,
                 },
             );
 
-            Ok(tid)
+            Ok(texture_id)
         }
     }
 
@@ -235,10 +253,11 @@ impl TextureHeap {
         unsafe {
             let texture = &self.textures[&texture_id];
             if (texture.width != width || texture.height != height as _) && !is_partial {
-                error!(
-                    "image size {width}x{height} does not match expected {}x{}",
-                    texture.width, texture.height
-                );
+                // todo: logging
+                // error!(
+                //     "image size {width}x{height} does not match expected {}x{}",
+                //     texture.width, texture.height
+                // );
                 return Err(Error::from_hresult(HRESULT(-1)));
             }
 
@@ -247,7 +266,7 @@ impl TextureHeap {
             let upload_pitch = upload_row_size.div_ceil(align) * align; // 256 bytes aligned
             let upload_size = height * upload_pitch;
 
-            let upload_buffer: ID3D12Resource = util::try_out_ptr(|v| {
+            let upload_buffer: ID3D12Resource = try_out_ptr(|v| {
                 self.device.CreateCommittedResource(
                     &D3D12_HEAP_PROPERTIES {
                         Type: D3D12_HEAP_TYPE_UPLOAD,
@@ -327,7 +346,7 @@ impl TextureHeap {
                 &src_location,
                 None,
             );
-            let barriers = [util::create_barrier(
+            let barriers = [create_barrier(
                 &texture.resource,
                 D3D12_RESOURCE_STATE_COPY_DEST,
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
@@ -342,7 +361,7 @@ impl TextureHeap {
             self.fence.wait()?;
             self.fence.incr();
 
-            barriers.into_iter().for_each(util::drop_barrier);
+            barriers.into_iter().for_each(drop_barrier);
 
             let _ = ManuallyDrop::into_inner(dst_location.pResource);
 
@@ -378,13 +397,11 @@ impl TextureHeap {
                                 0,
                             )?;
                         } else if let Some(_) = self.textures.get(&tid) {
-                            warn!(
-                                "egui is trying to modify a color texture {tid:?}, this *should* only happen for fonts and will be ignored."
-                            );
+                            // todo: logging
+                            // warn!("egui is trying to modify a color texture {tid:?}, this *should* only happen for fonts and will be ignored.");
                         } else {
-                            warn!(
-                                "egui is trying to update a non-existent texture {tid:?}. ignoring."
-                            );
+                            // todo: logging
+                            // warn!("egui is trying to update a non-existent texture {tid:?}. ignoring.");
                         }
                     }
                     ImageData::Font(ref fi) => {
@@ -425,9 +442,8 @@ impl TextureHeap {
                                 delta.pos.unwrap()[1] as _,
                             )?
                         } else {
-                            warn!(
-                                "egui is trying to update a non-existent texture {tid:?}. ignoring."
-                            );
+                            // todo: logging
+                            // warn!("egui is trying to update a non-existent texture {tid:?}. ignoring.");
                         }
                     }
                 }

@@ -23,6 +23,9 @@ use windows_sys::{
 #[unsafe(no_mangle)]
 extern "system" fn DllMain(_: isize, reason: u32, _: usize) -> bool {
     if reason == DLL_PROCESS_ATTACH {
+        unsafe {
+            std::env::set_var("RUST_BACKTRACE", "full");
+        };
         thread::spawn(inject_loader);
     }
 

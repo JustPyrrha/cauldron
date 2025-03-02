@@ -1,4 +1,4 @@
-use crate::gen_with_vtbl;
+use crate::{gen_with_vtbl, impl_instance};
 use std::ffi::{c_char, c_void};
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Threading::CRITICAL_SECTION;
@@ -30,4 +30,9 @@ gen_with_vtbl!(
     pub pad_100120: [u8;256],
     pub console_handle: HANDLE,
     pub lock: CRITICAL_SECTION,
+);
+
+impl_instance!(
+    NxLogImpl,
+    "48 8B 1D ? ? ? ? 48 8B 03 48 8B 78 48 48 8B 0D ? ? ? ?"
 );

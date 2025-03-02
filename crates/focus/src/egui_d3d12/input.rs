@@ -1,6 +1,9 @@
-use crate::renderer::pipeline::Pipeline;
-use egui::{Event, Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, RawInput, Rect, Vec2};
-use std::ffi::{CStr, c_void};
+use crate::RenderLoop;
+use egui::{
+    Context, Event, Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, RawInput, Rect, Vec2,
+};
+use parking_lot::Mutex;
+use std::ffi::CStr;
 use windows::Wdk::System::SystemInformation::NtQuerySystemTime;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
@@ -28,19 +31,17 @@ use windows::Win32::{
 pub(crate) fn process_input(
     hwnd: HWND,
     umsg: u32,
-    wparam: usize,
-    lparam: isize,
-    pipeline: &mut Pipeline,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    events: &Mutex<Vec<Event>>,
+    render_loop: &RenderLoop,
 ) {
     match umsg {
         WM_MOUSEMOVE => {
-            pipeline
-                .egui_events
-                .lock()
-                .push(Event::PointerMoved(get_pos(lparam)));
+            events.lock().push(Event::PointerMoved(get_pos(lparam)));
         }
         WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
-            pipeline.egui_events.lock().push(Event::PointerButton {
+            events.lock().push(Event::PointerButton {
                 pos: get_pos(lparam),
                 button: PointerButton::Primary,
                 pressed: true,
@@ -48,7 +49,7 @@ pub(crate) fn process_input(
             });
         }
         WM_LBUTTONUP => {
-            pipeline.egui_events.lock().push(Event::PointerButton {
+            events.lock().push(Event::PointerButton {
                 pos: get_pos(lparam),
                 button: PointerButton::Primary,
                 pressed: false,
@@ -56,7 +57,7 @@ pub(crate) fn process_input(
             });
         }
         WM_RBUTTONDOWN | WM_RBUTTONDBLCLK => {
-            pipeline.egui_events.lock().push(Event::PointerButton {
+            events.lock().push(Event::PointerButton {
                 pos: get_pos(lparam),
                 button: PointerButton::Secondary,
                 pressed: true,
@@ -64,7 +65,7 @@ pub(crate) fn process_input(
             });
         }
         WM_RBUTTONUP => {
-            pipeline.egui_events.lock().push(Event::PointerButton {
+            events.lock().push(Event::PointerButton {
                 pos: get_pos(lparam),
                 button: PointerButton::Secondary,
                 pressed: false,
@@ -72,7 +73,7 @@ pub(crate) fn process_input(
             });
         }
         WM_MBUTTONDOWN | WM_MBUTTONDBLCLK => {
-            pipeline.egui_events.lock().push(Event::PointerButton {
+            events.lock().push(Event::PointerButton {
                 pos: get_pos(lparam),
                 button: PointerButton::Middle,
                 pressed: true,
@@ -80,7 +81,7 @@ pub(crate) fn process_input(
             });
         }
         WM_MBUTTONUP => {
-            pipeline.egui_events.lock().push(Event::PointerButton {
+            events.lock().push(Event::PointerButton {
                 pos: get_pos(lparam),
                 button: PointerButton::Middle,
                 pressed: false,
@@ -88,35 +89,35 @@ pub(crate) fn process_input(
             });
         }
         WM_CHAR => {
-            if let Some(ch) = char::from_u32(wparam as _) {
+            if let Some(ch) = char::from_u32(wparam.0 as _) {
                 if !ch.is_control() {
-                    pipeline.egui_events.lock().push(Event::Text(ch.into()));
+                    events.lock().push(Event::Text(ch.into()));
                 }
             }
         }
         WM_MOUSEWHEEL => {
-            pipeline.egui_events.lock().push(Event::MouseWheel {
+            events.lock().push(Event::MouseWheel {
                 unit: MouseWheelUnit::Point,
                 modifiers: get_modifiers(wparam),
                 delta: Vec2 {
                     x: 0.0,
-                    y: (wparam >> 16) as i16 as f32 * 10. / WHEEL_DELTA as f32,
+                    y: (wparam.0 >> 16) as i16 as f32 * 10. / WHEEL_DELTA as f32,
                 },
             });
         }
         WM_MOUSEHWHEEL => {
-            pipeline.egui_events.lock().push(Event::MouseWheel {
+            events.lock().push(Event::MouseWheel {
                 unit: MouseWheelUnit::Point,
                 modifiers: get_modifiers(wparam),
                 delta: Vec2 {
-                    x: (wparam >> 16) as i16 as f32 * 10. / WHEEL_DELTA as f32,
+                    x: (wparam.0 >> 16) as i16 as f32 * 10. / WHEEL_DELTA as f32,
                     y: 0.0,
                 },
             });
         }
         msg @ (WM_KEYDOWN | WM_SYSKEYDOWN) => {
             if let Some(key) = get_key(wparam) {
-                let lock = &mut *pipeline.egui_events.lock();
+                let lock = &mut *events.lock();
                 let mods = get_key_modifiers(msg);
 
                 if key == Key::Space {
@@ -142,7 +143,7 @@ pub(crate) fn process_input(
         }
         msg @ (WM_KEYUP | WM_SYSKEYUP) => {
             if let Some(key) = get_key(wparam) {
-                pipeline.egui_events.lock().push(Event::Key {
+                events.lock().push(Event::Key {
                     key,
                     pressed: false,
                     repeat: false,
@@ -154,16 +155,14 @@ pub(crate) fn process_input(
         _ => {}
     }
 
-    pipeline
-        .render_loop()
-        .on_wnd_proc(hwnd, umsg, WPARAM(wparam), LPARAM(lparam));
+    render_loop.on_wnd_proc(hwnd, umsg, wparam, lparam);
 }
 
-pub(crate) fn collect_input(pipeline: &mut Pipeline) -> RawInput {
-    let events = std::mem::take(&mut *pipeline.egui_events.lock());
+pub fn collect_input(events: &Mutex<Vec<Event>>, ctx: &mut Context, hwnd: HWND) -> RawInput {
+    let events = events.lock().clone();
     RawInput {
-        viewport_id: pipeline.ctx.viewport_id(),
-        screen_rect: Some(get_screen_rect(pipeline.hwnd)),
+        viewport_id: ctx.viewport_id(),
+        screen_rect: Some(get_screen_rect(hwnd)),
         time: Some(get_system_time()),
         modifiers: Modifiers::default(),
         max_texture_side: None,
@@ -177,7 +176,6 @@ pub(crate) fn collect_input(pipeline: &mut Pipeline) -> RawInput {
     }
 }
 
-/// Returns time in seconds.
 pub fn get_system_time() -> f64 {
     let mut time = 0;
     unsafe {
@@ -204,27 +202,27 @@ pub fn get_screen_size(hwnd: HWND) -> Pos2 {
 }
 
 #[inline]
-pub fn get_screen_rect(hwnd: isize) -> Rect {
+pub fn get_screen_rect(hwnd: HWND) -> Rect {
     Rect {
         min: Pos2::ZERO,
-        max: get_screen_size(HWND(hwnd as *mut c_void)),
+        max: get_screen_size(hwnd),
     }
 }
 
-fn get_pos(lparam: isize) -> Pos2 {
-    let x = (lparam & 0xFFFF) as i16 as f32;
-    let y = (lparam >> 16 & 0xFFFF) as i16 as f32;
+fn get_pos(lparam: LPARAM) -> Pos2 {
+    let x = (lparam.0 & 0xFFFF) as i16 as f32;
+    let y = (lparam.0 >> 16 & 0xFFFF) as i16 as f32;
 
     Pos2::new(x, y)
 }
 
-fn get_modifiers(wparam: usize) -> Modifiers {
+fn get_modifiers(wparam: WPARAM) -> Modifiers {
     Modifiers {
         alt: false,
-        ctrl: (wparam & MK_CONTROL.0 as usize) != 0,
-        shift: (wparam & MK_SHIFT.0 as usize) != 0,
+        ctrl: (wparam.0 & MK_CONTROL.0 as usize) != 0,
+        shift: (wparam.0 & MK_SHIFT.0 as usize) != 0,
         mac_cmd: false,
-        command: (wparam & MK_CONTROL.0 as usize) != 0,
+        command: (wparam.0 & MK_CONTROL.0 as usize) != 0,
     }
 }
 
@@ -242,11 +240,11 @@ fn get_key_modifiers(msg: u32) -> Modifiers {
 }
 
 //todo(py): this is still missing quite a lot
-fn get_key(wparam: usize) -> Option<Key> {
-    match wparam {
-        0x30..=0x39 => unsafe { Some(std::mem::transmute::<_, Key>(wparam as u8 - 0x21)) },
-        0x41..=0x5A => unsafe { Some(std::mem::transmute::<_, Key>(wparam as u8 - 0x28)) },
-        _ => match VIRTUAL_KEY(wparam as u16) {
+fn get_key(wparam: WPARAM) -> Option<Key> {
+    match wparam.0 {
+        0x30..=0x39 => unsafe { Some(std::mem::transmute::<_, Key>(wparam.0 as u8 - 0x21)) },
+        0x41..=0x5A => unsafe { Some(std::mem::transmute::<_, Key>(wparam.0 as u8 - 0x28)) },
+        _ => match VIRTUAL_KEY(wparam.0 as u16) {
             VK_DOWN => Some(Key::ArrowDown),
             VK_LEFT => Some(Key::ArrowLeft),
             VK_RIGHT => Some(Key::ArrowRight),

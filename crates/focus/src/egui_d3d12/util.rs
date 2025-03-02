@@ -1,16 +1,13 @@
-use log::{debug, error};
+use libdecima::log;
 use std::ffi::c_void;
 use std::fmt::Display;
 use std::mem::ManuallyDrop;
-use std::sync::atomic::{AtomicU64, Ordering};
-use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D::ID3DBlob;
 use windows::Win32::Graphics::Direct3D12::{
-    D3D12_FENCE_FLAG_NONE, D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0,
-    D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAG_NONE,
-    D3D12_RESOURCE_BARRIER_TYPE_TRANSITION, D3D12_RESOURCE_STATES,
-    D3D12_RESOURCE_TRANSITION_BARRIER, D3D12GetDebugInterface, ID3D12Debug6, ID3D12Device,
-    ID3D12Fence, ID3D12Resource,
+    D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+    D3D12_RESOURCE_BARRIER_FLAG_NONE, D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+    D3D12_RESOURCE_STATES, D3D12_RESOURCE_TRANSITION_BARRIER, D3D12GetDebugInterface, ID3D12Debug6,
+    ID3D12Resource,
 };
 use windows::Win32::Graphics::Dxgi::{
     DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE, DXGIGetDebugInterface1, IDXGIInfoQueue,
@@ -20,50 +17,6 @@ use windows::Win32::System::Memory::{
     PAGE_READONLY, PAGE_READWRITE, VirtualQuery,
 };
 use windows::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
-use windows::Win32::System::Threading::{CREATE_EVENT, CreateEventExW, WaitForSingleObjectEx};
-
-/// Wrapper around [`windows::Win32::Graphics::Direct3D12::ID3D12Fence`].
-pub struct Fence {
-    fence: ID3D12Fence,
-    value: AtomicU64,
-    event: HANDLE,
-}
-
-impl Fence {
-    pub fn new(device: &ID3D12Device) -> windows::core::Result<Self> {
-        let fence = unsafe { device.CreateFence(0, D3D12_FENCE_FLAG_NONE) }?;
-        let value = AtomicU64::new(0);
-        let event = unsafe { CreateEventExW(None, None, CREATE_EVENT(0), 0x1f0003) }?;
-
-        Ok(Fence {
-            fence,
-            value,
-            event,
-        })
-    }
-    pub fn fence(&self) -> &ID3D12Fence {
-        &self.fence
-    }
-
-    pub fn value(&self) -> u64 {
-        self.value.load(Ordering::SeqCst)
-    }
-    pub fn incr(&self) {
-        self.value.fetch_add(1, Ordering::SeqCst);
-    }
-
-    pub fn wait(&self) -> windows::core::Result<()> {
-        let value = self.value();
-        unsafe {
-            if self.fence.GetCompletedValue() < value {
-                self.fence.SetEventOnCompletion(value, self.event)?;
-                WaitForSingleObjectEx(self.event, u32::MAX, false);
-            }
-        }
-
-        Ok(())
-    }
-}
 
 pub fn try_out_ptr<T, F, E, O>(mut f: F) -> Result<T, E>
 where
@@ -117,7 +70,7 @@ pub fn print_error_blob<D: Display, E>(msg: D) -> impl Fn((E, ID3DBlob)) -> E {
         let buf_ptr = unsafe { err_blob.GetBufferPointer() } as *mut u8;
         let buf_size = unsafe { err_blob.GetBufferSize() };
         let s = unsafe { String::from_raw_parts(buf_ptr, buf_size, buf_size + 1) };
-        error!("{msg}: {s}");
+        log!("{msg}: {s}");
         e
     }
 }
@@ -134,7 +87,8 @@ pub fn enable_debug_interface(enable_gpu_validation: bool) {
             }
         },
         Err(e) => {
-            error!("Could not create debug interface: {e:?}")
+            // todo: logging
+            log!("Could not create debug interface: {e:?}")
         }
     }
 }
@@ -158,8 +112,9 @@ pub fn print_dxgi_debug_messages() {
                 .unwrap()
         };
         let diqm = unsafe { pdiqm.as_ref().unwrap() };
-        debug!(
-            "[DIQ] {}",
+        log!(
+            "DIQ",
+            "{}",
             String::from_utf8_lossy(unsafe {
                 std::slice::from_raw_parts(diqm.pDescription, diqm.DescriptionByteLength - 1)
             })

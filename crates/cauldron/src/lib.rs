@@ -14,8 +14,10 @@ use crate::metadata::{
 };
 use crate::util::message_box;
 use crate::version::{CauldronGameType, GameVersion};
+// use focus::egui_d3d12::pipeline::Pipeline;
 use libdecima::log;
 use libdecima::mem::offsets::Offsets;
+use libdecima::mem::patch_reporting_loggers;
 use libdecima::types::nixxes::log::NxLogImpl;
 use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MH_STATUS, MhHook};
 use once_cell::sync::OnceCell;
@@ -452,7 +454,14 @@ unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
         // strip nixxes log prefix eg "01:40:32:458 (00041384) > "
         let cstr = CStr::from_ptr(text);
         let log_line = cstr.to_string_lossy().to_string();
-        ::log::info!("{}", if log_line.starts_with("---") { log_line.as_str() } else { log_line.split_at(26).1 });
+        ::log::info!(
+            "{}",
+            if log_line.starts_with("---") {
+                log_line.as_str()
+            } else {
+                log_line.split_at(26).1
+            }
+        );
 
         (NIXXES_PRINTLN.get().unwrap())(this, text)
     }
@@ -461,6 +470,8 @@ unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
 #[doc(hidden)]
 pub unsafe fn handle_dll_attach() {
     unsafe {
+        patch_reporting_loggers();
+
         let config = load_config();
         let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
         if config.logging.show_console {
@@ -484,8 +495,8 @@ pub unsafe fn handle_dll_attach() {
         #[cfg(feature = "nixxes")]
         {
             Offsets::setup();
-            let log_ptr = *Offsets::resolve::<*mut NxLogImpl>("nx::NxLogImpl::Instance").unwrap();
-            let vftable = NxLogImpl::__vftable(log_ptr);
+            let log = NxLogImpl::get_instance().unwrap();
+            let log = NxLogImpl::__vftable(log as *const _ as *mut _);
 
             match MH_Initialize() {
                 MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
@@ -493,11 +504,8 @@ pub unsafe fn handle_dll_attach() {
                 _ => unreachable!(),
             }
 
-            let nxlogimpl_println = MhHook::new(
-                vftable.fn_println as *mut _,
-                nxlogimpl_println_impl as *mut _,
-            )
-            .unwrap();
+            let nxlogimpl_println =
+                MhHook::new(log.fn_println as *mut _, nxlogimpl_println_impl as *mut _).unwrap();
 
             NIXXES_PRINTLN
                 .set(std::mem::transmute(nxlogimpl_println.trampoline()))
@@ -510,6 +518,8 @@ pub unsafe fn handle_dll_attach() {
             MH_ApplyQueued()
                 .ok()
                 .expect("cauldron: failed to apply queued hooks");
+
+            focus::internal::attach();
         }
 
         log!("Cauldron", "Starting v{}...", env!("CARGO_PKG_VERSION"));
@@ -545,4 +555,9 @@ pub unsafe fn handle_dll_attach() {
             instance
         });
     }
+}
+
+#[doc(hidden)]
+pub unsafe fn handle_dll_detach() {
+    // todo
 }

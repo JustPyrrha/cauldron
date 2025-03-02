@@ -10,7 +10,7 @@ libloading.workspace = true
 log.workspace = true
 semver.workspace = true
 simplelog = { workspace = true, features = ["paris"] }
-tabled = "0.17.0"
+tabled = "0.18.0"
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_Console"] }
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 serde = { workspace = true, features = ["derive"] }
@@ -19,8 +19,9 @@ toml_edit = "0.22.22"
 minhook.workspace = true
 libdecima.workspace = true
 once_cell.workspace = true
+focus = { path = "../focus", optional = true}
 
 [features]
 default = ["nixxes"]
 
-nixxes = ["libdecima/nixxes"]
+nixxes = ["libdecima/nixxes", "dep:focus"]

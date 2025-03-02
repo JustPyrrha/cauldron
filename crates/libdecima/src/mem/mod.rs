@@ -1,10 +1,20 @@
 pub mod offsets;
 pub mod scan;
 
+use crate::log;
+use crate::mem::offsets::Offset;
+use std::ffi::c_void;
+use std::ptr::read_unaligned;
 use std::slice;
-use windows::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
+use windows::Win32::System::Diagnostics::Debug::{
+    FlushInstructionCache, IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Memory::{
+    PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtect,
+};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
+use windows::Win32::System::Threading::GetCurrentProcess;
 
 #[derive(Debug, Clone)]
 pub enum PatternSearchError {
@@ -61,14 +71,21 @@ pub fn find_pattern(
     Ok((start_address as usize + result) as *mut u8)
 }
 
-pub fn offset_from_instruction(signature: &str, add: u32) -> Result<*const u8, PatternSearchError> {
+pub fn offset_from_instruction(
+    signature: &str,
+    rip_rel_add: u32,
+) -> Result<*const u8, PatternSearchError> {
     let (module_base, module_end) = get_module()?;
     let addr = find_pattern(module_base as *mut u8, module_end - module_base, signature)?;
     let rel_offset = unsafe {
-        let ptr = addr.add(add as usize) as *const i32;
-        *ptr + size_of::<i32>() as i32
+        let ptr = addr.add(rip_rel_add as usize) as *const i32;
+        read_unaligned(ptr) + size_of::<i32>() as i32
     };
-    Ok((addr as usize + add as usize + rel_offset as usize - module_base) as *const u8)
+    Ok(unsafe {
+        addr.add(rip_rel_add as usize)
+            .add(rel_offset as usize)
+            .sub(module_base)
+    })
 }
 
 pub fn get_module() -> Result<(usize, usize), PatternSearchError> {
@@ -155,4 +172,50 @@ pub fn get_rdata_section() -> Result<(usize, usize), PatternSearchError> {
 
 pub fn get_data_section() -> Result<(usize, usize), PatternSearchError> {
     get_section(".data")
+}
+
+pub fn patch(ptr: *mut c_void, data: &[u8]) {
+    if !ptr.is_null() {
+        unsafe {
+            let mut flags = PAGE_PROTECTION_FLAGS::default();
+            VirtualProtect(ptr, data.len(), PAGE_EXECUTE_READWRITE, &mut flags).unwrap();
+            for (index, byte) in data.iter().enumerate() {
+                std::ptr::write_bytes(ptr.add(index * size_of::<u8>()), *byte, 1);
+            }
+            VirtualProtect(ptr, data.len(), flags, &mut flags).unwrap();
+            FlushInstructionCache(GetCurrentProcess(), Some(ptr as *const _), data.len()).unwrap();
+        }
+    }
+}
+
+/// Patches out the Crash Logger and Telemetry Logger
+pub fn patch_reporting_loggers() {
+    #[cfg(feature = "hfw")]
+    {
+        // patches by Nukem9
+
+        // disable crash logger
+        patch(
+            Offset::from_signature("40 53 48 83 EC 20 80 79 38 00 48 8B D9 75 4C")
+                .unwrap()
+                .as_ptr::<c_void>(),
+            &[
+                0xc3, // ret
+            ],
+        );
+
+        // disable telemetry logger
+        patch(
+            Offset::from_signature("E8 ? ? ? ? 0F B6 F8 47 38 ? ? 75 05 E8")
+                .unwrap()
+                .as_ptr::<c_void>(),
+            &[
+                0xB0, 0x01, // mov al,0x1
+                0x90, // nop
+                0x90, // nop
+                0x90, // nop
+            ],
+        );
+        log!("Disabled (patched) crash and telemetry loggers.");
+    }
 }
