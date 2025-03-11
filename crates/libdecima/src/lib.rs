@@ -37,7 +37,7 @@ pub mod macros {
         ) => {
             #[repr(C)]
             #[derive(Debug)]
-            #[allow(non_camel_case_types)]
+            #[allow(non_camel_case_types, non_snake_case)]
             pub struct /* VFT */ $ {concat($name, _vtbl)} {
                 $(
                     pub $func: extern "C" fn(this: *mut $name $(, $arg: $arg_t)*) $(-> $func_ret)?
@@ -61,6 +61,7 @@ pub mod macros {
                 }
 
                 $(
+                    #[allow(non_snake_case)]
                     pub fn $func(this: *mut $name $(, $arg: $arg_t)*) $(-> $func_ret)? {
                         let vftable = Self::__vftable(this as *const _ as *mut _);
                         (vftable.$func)(this $(, $arg)*)

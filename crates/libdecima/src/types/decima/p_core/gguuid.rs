@@ -1,6 +1,6 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[repr(C)]
 pub struct GGUUID {
     pub data0: u8,
@@ -42,5 +42,11 @@ impl Display for GGUUID {
             self.data14,
             self.data15
         ))
+    }
+}
+
+impl Debug for GGUUID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("GGUUID {{ {} }}", self))
     }
 }

@@ -4,6 +4,7 @@ use crate::egui_d3d12::message_filter::MessageFilter;
 use egui::RawInput;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 
+mod editor;
 pub mod egui_d3d12;
 
 pub type RenderLoop = Box<dyn EguiRenderLoop + Send + Sync>;
@@ -25,13 +26,19 @@ pub trait EguiRenderLoop {
 #[doc(hidden)]
 pub mod internal {
     use crate::EguiRenderLoop;
+    use crate::editor::{FocusEditor, widgets_demo_window::WidgetsDemo};
+    use crate::egui_d3d12::message_filter::MessageFilter;
     use crate::egui_d3d12::painter::Painter;
     use crate::egui_d3d12::pipeline::Pipeline;
-    use crate::egui_d3d12::util;
     use crate::egui_d3d12::util::print_dxgi_debug_messages;
-    use egui::Context;
+    use egui::{Context, Key, RawInput};
+    use glam::{EulerRot, Mat3};
     use libdecima::log;
     use libdecima::mem::offsets::Offset;
+    use libdecima::types::decima::core::camera_entity::CameraEntity;
+    use libdecima::types::decima::core::entity::Entity;
+    use libdecima::types::decima::core::player::Player;
+    use libdecima::types::decima::core::world_transform::GlamTransform;
     use libdecima::types::nixxes::nx_d3d::NxD3DImpl;
     use libdecima::types::nixxes::nx_dxgi::NxDXGIImpl;
     use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MH_STATUS, MhHook};
@@ -51,7 +58,7 @@ pub mod internal {
 
     pub fn attach() {
         log!("attach");
-        util::enable_debug_interface(false);
+        // util::enable_debug_interface(false);
 
         match unsafe { MH_Initialize() } {
             MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
@@ -99,7 +106,7 @@ pub mod internal {
 
         // todo: move this
         unsafe {
-            RENDER_LOOP.get_or_init(|| Box::new(DefaultRenderLoop::new()));
+            RENDER_LOOP.get_or_init(|| Box::new(FocusUI::new()));
         }
         let Some(render_loop) = (unsafe { RENDER_LOOP.take() }) else {
             return Err(Error::from(HRESULT(-1)));
@@ -145,46 +152,170 @@ pub mod internal {
 
     #[derive(Debug)]
     #[allow(dead_code)]
-    struct DefaultRenderLoop {}
+    struct FocusUI {
+        pub ui_open: bool,
+        pub editor_open: bool,
+        pub transforms_open: bool,
+        pub widgets_open: bool,
+        pub show_gizmos: bool,
+        pub player_entity_ref: Option<&'static mut Entity>,
+        pub player_camera_ref: Option<&'static mut CameraEntity>,
+        pub editor: FocusEditor,
+        pub widgets_demo: WidgetsDemo,
+    }
 
-    impl DefaultRenderLoop {
+    impl FocusUI {
         #[allow(dead_code)]
         pub fn new() -> Self {
-            DefaultRenderLoop {}
+            FocusUI {
+                ui_open: false,
+                editor_open: false,
+                transforms_open: false,
+                widgets_open: false,
+                show_gizmos: false,
+                player_entity_ref: None,
+                player_camera_ref: None,
+                editor: FocusEditor::default(),
+                widgets_demo: WidgetsDemo::default(),
+            }
         }
     }
 
-    impl EguiRenderLoop for DefaultRenderLoop {
-        fn initialize<'a>(&'a mut self, _ctx: &'a Context) {}
+    impl EguiRenderLoop for FocusUI {
+        fn before_render<'a>(&'a mut self, ctx: &'a Context) {
+            if ctx.input(|f| f.key_pressed(Key::Backtick)) {
+                log!("toggle ui");
+                self.ui_open = !self.ui_open;
+            }
+        }
 
         fn render(&mut self, ctx: &Context) {
+            if self.transforms_open {
+                egui::Window::new("Transforms")
+                    .resizable(false)
+                    .open(&mut self.transforms_open)
+                    .show(ctx, |ui| {
+                        if self.player_entity_ref.is_none() {
+                            let player = Player::get_local_player(0);
+                            let player = unsafe { &*player };
+                            self.player_entity_ref = Some(unsafe { &mut *player.entity });
+                            self.player_camera_ref =
+                                Some(unsafe { &mut *player.get_last_active_camera().unwrap() });
+                        }
+
+                        if ui.button("get references").clicked() {
+                            let player = Player::get_local_player(0);
+                            let player = unsafe { &*player };
+                            self.player_entity_ref = Some(unsafe { &mut *player.entity });
+                            self.player_camera_ref =
+                                Some(unsafe { &mut *player.get_last_active_camera().unwrap() });
+                        }
+                        ui.spacing();
+                        ui.collapsing("Player", |ui| {
+                            egui::Grid::new("player")
+                                .num_columns(2)
+                                .spacing([12.0, 8.0])
+                                .striped(true)
+                                .show(ui, |ui| {
+                                    let transform =
+                                        self.player_entity_ref.as_ref().unwrap().get_transform();
+                                    ui.label("Position");
+                                    ui.label(format!(
+                                        "x: {:.4}, y: {:.4}, z: {:.4}",
+                                        transform.pos.x, transform.pos.y, transform.pos.z
+                                    ));
+                                    ui.end_row();
+
+                                    let (rot_x, rot_y, rot_z) =
+                                        Mat3::from(transform.rot).to_euler(EulerRot::XYZ);
+                                    ui.label("Rotation");
+                                    ui.label(format!(
+                                        "x: {:.4}, y: {:.4}, z: {:.4}",
+                                        rot_x, rot_y, rot_z
+                                    ));
+                                    ui.end_row();
+                                });
+                        });
+                        ui.spacing();
+                        if let Some(camera) = &self.player_camera_ref {
+                            ui.collapsing("Camera", |ui| {
+                                egui::Grid::new("camera")
+                                    .num_columns(2)
+                                    .spacing([12.0, 8.0])
+                                    .striped(true)
+                                    .show(ui, |ui| {
+                                        let mut transform =
+                                            GlamTransform::from(camera.get_transform().clone());
+                                        let player_transform = GlamTransform::from(
+                                            self.player_entity_ref
+                                                .as_ref()
+                                                .unwrap()
+                                                .get_transform()
+                                                .clone(),
+                                        );
+                                        transform.pos += player_transform.pos;
+                                        transform.rot += player_transform.rot;
+
+                                        ui.label("Position");
+                                        ui.label(format!(
+                                            "x: {:.4}, y: {:.4}, z: {:.4}",
+                                            transform.pos.x, transform.pos.y, transform.pos.z
+                                        ));
+                                        ui.end_row();
+
+                                        let (rot_x, rot_y, rot_z) =
+                                            Mat3::from(transform.rot).to_euler(EulerRot::XYZ);
+                                        ui.label("Rotation");
+                                        ui.label(format!(
+                                            "x: {:.4}, y: {:.4}, z: {:.4}",
+                                            rot_x, rot_y, rot_z
+                                        ));
+                                        ui.end_row();
+                                    });
+                            });
+                        }
+                    });
+            }
+
+            if !self.ui_open {
+                return;
+            }
+
             egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     ui.label(format!("Cauldron: v{}", env!("CARGO_PKG_VERSION")));
                     ui.separator();
+                    ui.toggle_value(&mut self.editor_open, "Editor");
+                    ui.toggle_value(&mut self.transforms_open, "Transforms");
+                    ui.toggle_value(&mut self.widgets_open, "Widgets Demo");
+                    ui.toggle_value(&mut self.show_gizmos, "Gizmos");
                 });
             });
 
-            egui::Window::new("🔧 Settings")
+            egui::Window::new("Widgets Demo")
                 .vscroll(true)
+                .open(&mut self.widgets_open)
                 .show(ctx, |ui| {
-                    ctx.settings_ui(ui);
+                    self.widgets_demo.ui(ui);
                 });
 
-            egui::Window::new("🔍 Inspection")
+            egui::Window::new("Editor")
                 .vscroll(true)
+                .open(&mut self.editor_open.clone())
                 .show(ctx, |ui| {
-                    ctx.inspection_ui(ui);
+                    self.editor.editor_ui(ui);
                 });
+        }
 
-            egui::Window::new("📝 Memory")
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ctx.memory_ui(ui);
-                });
+        fn message_filter(&self, _: &RawInput) -> MessageFilter {
+            if self.ui_open {
+                MessageFilter::all()
+            } else {
+                MessageFilter::empty()
+            }
         }
     }
 
-    unsafe impl Send for DefaultRenderLoop {}
-    unsafe impl Sync for DefaultRenderLoop {}
+    unsafe impl Send for FocusUI {}
+    unsafe impl Sync for FocusUI {}
 }

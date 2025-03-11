@@ -25,7 +25,9 @@ focus = { version = "0.1.0-alpha", path = "crates/focus" }
 libdecima = { version = "0.1.0-alpha", path = "crates/libdecima" }
 minhook = { version = "1.0.0", path = "crates/minhook" }
 
+bitflags = "2.9.0"
 cc = "1.2.3"
+glam = { version = "0.30.0", features = ["mint"] }
 libc = "0.2.168"
 libloading = "0.8.6"
 log = "0.4.22"

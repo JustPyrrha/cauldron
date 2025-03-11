@@ -6,7 +6,8 @@ authors.workspace = true
 description = "utilities for working directly with decima games."
 
 [dependencies]
-bitflags = "2.8.0"
+bitflags = "2.9.0"
+glam.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Diagnostics_Debug", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Kernel", "Win32_System_Threading", "Win32_Graphics",  "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi", "Win32_UI_WindowsAndMessaging", "Win32_System_Memory"] }
 
 [features]
