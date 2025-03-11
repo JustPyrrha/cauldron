@@ -9,6 +9,7 @@ use std::ffi::c_void;
 
 gen_with_vtbl!(
     Mover,
+    MoverVtbl,
 
     fn get_rtti() -> *const RTTI;
     fn fn_destroy();

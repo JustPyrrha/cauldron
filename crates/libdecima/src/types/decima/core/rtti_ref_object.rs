@@ -4,6 +4,7 @@ use crate::types::decima::p_core::prelude::*;
 
 gen_with_vtbl!(
     RTTIRefObject,
+    RTTIRefObjectVtbl,
 
     fn GetRTTI() -> *const RTTI;
     fn Destroy();

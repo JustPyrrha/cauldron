@@ -5,6 +5,7 @@ use windows::Win32::Graphics::Direct3D12::ID3D12CommandQueue;
 
 gen_with_vtbl!(
     NxD3DImpl,
+    NxD3DImplVtbl,
 
     fn fn_destructor();
     fn fn_initialize(unk0: i32, unk1: u8) -> *mut c_void;
@@ -70,7 +71,7 @@ gen_with_vtbl!(
 assert_size!(NxD3DImpl, 0x200);
 assert_offset!(NxD3DImpl, driver, 0x180);
 
-assert_offset!(NxD3DImpl_vtbl, fn_get_command_queue, 264);
+assert_offset!(NxD3DImplVtbl, fn_get_command_queue, 264);
 
 impl_instance!(
     NxD3DImpl,

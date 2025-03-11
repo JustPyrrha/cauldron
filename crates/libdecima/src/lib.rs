@@ -1,5 +1,5 @@
 #![feature(once_cell_get_mut)]
-#![feature(macro_metavar_expr_concat)]
+// #![feature(macro_metavar_expr_concat)]
 #![allow(static_mut_refs)]
 
 #[doc(include = "../README.md")]
@@ -28,6 +28,7 @@ pub mod macros {
     macro_rules! gen_with_vtbl {
         (
             $name:ident,
+            $name_vtbl:ident,
             $(
                 fn $func:ident($($arg:ident: $arg_t:ty),*) $(-> $func_ret:ty)?
             );*;
@@ -38,7 +39,7 @@ pub mod macros {
             #[repr(C)]
             #[derive(Debug)]
             #[allow(non_camel_case_types, non_snake_case)]
-            pub struct /* VFT */ $ {concat($name, _vtbl)} {
+            pub struct /* VFT */ /*$ {concat($name, _vtbl)}*/ $name_vtbl {
                 $(
                     pub $func: extern "C" fn(this: *mut $name $(, $arg: $arg_t)*) $(-> $func_ret)?
                 ),*
@@ -47,14 +48,14 @@ pub mod macros {
             #[repr(C)]
             #[derive(Debug)]
             pub struct $name {
-                pub __vftable: *mut $ {concat($name, _vtbl)},
+                pub __vftable: *mut /*$ {concat($name, _vtbl)}*/ $name_vtbl,
                 $(
                     pub $field: $field_t
                 ),*
             }
 
             impl $name {
-                pub fn __vftable<'a>(this: *mut $name) -> &'a $ {concat($name, _vtbl)} {
+                pub fn __vftable<'a>(this: *mut $name) -> &'a /*$ {concat($name, _vtbl)}*/ $name_vtbl {
                     let instance = unsafe { &*this };
                     let vftable = unsafe { &*instance.__vftable };
                     vftable
