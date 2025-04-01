@@ -1,4 +1,4 @@
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/JustPyrrha/cauldron/build.yml?style=flat-square&logo=rust&logoColor=%23cad3f5&labelColor=%23363a4f&color=%23a6da95)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/cauldron-decima/cauldron/build.yml?style=flat-square&logo=rust&logoColor=%23cad3f5&labelColor=%23363a4f&color=%23a6da95)
 [![Discord](https://img.shields.io/discord/1012475585605414983?style=flat-square&logo=discord&logoColor=%23cad3f5&labelColor=%23363a4f&color=%238aadf4)](https://discord.gg/Gt4gkMwadB)
 
 # cauldron
