@@ -25,5 +25,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Add x86_64-pc-windows-msvc Target
         run: rustup target add x86_64-pc-windows-msvc
+      - name: (Temp Fix) Add catppuccin-whiskers
+        run: cargo install catppuccin-whiskers
       - name: Build
         run: cargo build --verbose
