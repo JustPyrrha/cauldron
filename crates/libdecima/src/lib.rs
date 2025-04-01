@@ -1,5 +1,5 @@
 #![feature(once_cell_get_mut)]
-#![feature(macro_metavar_expr_concat)]
+// #![feature(macro_metavar_expr_concat)]
 #![allow(static_mut_refs)]
 
 #[doc(include = "../README.md")]
@@ -8,6 +8,7 @@ compile_error!("At least one target feature must be enabled.");
 
 pub mod mem;
 pub mod types;
+pub mod util;
 
 pub mod macros {
     #[macro_export]
@@ -28,6 +29,7 @@ pub mod macros {
     macro_rules! gen_with_vtbl {
         (
             $name:ident,
+            $name_vtbl:ident,
             $(
                 fn $func:ident($($arg:ident: $arg_t:ty),*) $(-> $func_ret:ty)?
             );*;
@@ -38,7 +40,7 @@ pub mod macros {
             #[repr(C)]
             #[derive(Debug)]
             #[allow(non_camel_case_types, non_snake_case)]
-            pub struct /* VFT */ $ {concat($name, _vtbl)} {
+            pub struct /* VFT */ /*$ {concat($name, _vtbl)}*/ $name_vtbl {
                 $(
                     pub $func: extern "C" fn(this: *mut $name $(, $arg: $arg_t)*) $(-> $func_ret)?
                 ),*
@@ -47,14 +49,14 @@ pub mod macros {
             #[repr(C)]
             #[derive(Debug)]
             pub struct $name {
-                pub __vftable: *mut $ {concat($name, _vtbl)},
+                pub __vftable: *mut /*$ {concat($name, _vtbl)}*/ $name_vtbl,
                 $(
                     pub $field: $field_t
                 ),*
             }
 
             impl $name {
-                pub fn __vftable<'a>(this: *mut $name) -> &'a $ {concat($name, _vtbl)} {
+                pub fn __vftable<'a>(this: *mut $name) -> &'a /*$ {concat($name, _vtbl)}*/ $name_vtbl {
                     let instance = unsafe { &*this };
                     let vftable = unsafe { &*instance.__vftable };
                     vftable
@@ -102,12 +104,15 @@ pub mod log {
     use crate::types::nixxes::log::NxLogImpl;
 
     pub fn log_impl(category: &str, text: &str) {
-        let log = NxLogImpl::get_instance().unwrap();
-        NxLogImpl::fn_log(
-            log as *const _ as *mut _,
-            format!("{}\0", category).as_str().as_ptr() as *const _,
-            format!("{}\0", text).as_str().as_ptr() as *const _,
-        )
+        if let Some(log) = NxLogImpl::get_instance() {
+            NxLogImpl::fn_log(
+                log as *const _ as *mut _,
+                format!("{}\0", category).as_str().as_ptr() as *const _,
+                format!("{}\0", text).as_str().as_ptr() as *const _,
+            )
+        } else {
+            println!("[{category}] {text}");
+        }
     }
 
     #[macro_export]

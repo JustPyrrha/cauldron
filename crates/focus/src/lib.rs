@@ -57,7 +57,7 @@ pub mod internal {
         OnceCell::new();
 
     pub fn attach() {
-        log!("attach");
+        // log!("attach");
         // util::enable_debug_interface(false);
 
         match unsafe { MH_Initialize() } {
@@ -73,7 +73,7 @@ pub mod internal {
         .as_relative(7)
         .as_adjusted(size_of::<*mut c_void>() * 10)
         .as_ptr::<*mut c_void>();
-        log!("focus::internal", "{:p}", present_ptr);
+        // log!("focus::internal", "{:p}", present_ptr);
 
         let present_hook =
             unsafe { MhHook::new(*present_ptr, present_hook_impl as *mut _).unwrap() };
@@ -93,7 +93,7 @@ pub mod internal {
                 .ok()
                 .expect("focus: failed to apply queued hooks");
         };
-        log!("attach complete");
+        // log!("attach complete");
     }
 
     fn init_pipeline(hwnd: HWND) -> Result<Mutex<Pipeline>> {

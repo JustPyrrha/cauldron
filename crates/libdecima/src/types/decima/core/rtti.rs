@@ -271,8 +271,11 @@ pub struct RTTIAtom {
 
 impl NamedRTTI for RTTIAtom {
     fn name(&self) -> std::string::String {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(self.type_name) };
-        cstr.to_string_lossy().into_owned()
+        if self.type_name.is_null() {
+            std::string::String::new()
+        } else {
+            unsafe { CStr::from_ptr(self.type_name).to_string_lossy().to_string() }
+        }
     }
 }
 
@@ -298,7 +301,7 @@ impl SerializableRTTI for RTTIAtom {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct RTTIPointerData {
     pub base: RTTIContainerTypeBase,
@@ -342,7 +345,7 @@ pub struct RTTIContainerData {
     pub fn_from_string: *mut extern "C" fn(&RTTIStringSpan, *const RTTI, *const c_void) -> bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct RTTIContainerTypeBase {
     pub type_name: *const c_char,
@@ -360,9 +363,15 @@ pub struct RTTIContainer {
 
 impl NamedRTTI for RTTIContainer {
     fn name(&self) -> std::string::String {
-        let cstr = unsafe { std::ffi::CStr::from_ptr((&*self.container_type).type_name) };
-        let container_name = cstr.to_string_lossy().into_owned();
-        if container_name == "cptr" {
+        let container_name = {
+            let type_name = unsafe { (&*self.container_type).type_name };
+            if type_name.is_null() {
+                std::string::String::new()
+            } else {
+                unsafe { CStr::from_ptr(type_name).to_string_lossy().to_string() }
+            }
+        };
+        if container_name == "cptr".to_string() {
             format!("CPtr<{}>", unsafe { &*self.item_type }.get_symbol_name())
         } else {
             format!(
@@ -550,8 +559,11 @@ impl SerializableRTTI for RTTIEnum {
 
 impl NamedRTTI for RTTIEnum {
     fn name(&self) -> std::string::String {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(self.type_name) };
-        cstr.to_string_lossy().into_owned()
+        if self.type_name.is_null() {
+            std::string::String::new()
+        } else {
+            unsafe { CStr::from_ptr(self.type_name).to_string_lossy().to_string() }
+        }
     }
 }
 
@@ -728,8 +740,11 @@ impl SerializableRTTI for RTTICompound {
 
 impl NamedRTTI for RTTICompound {
     fn name(&self) -> std::string::String {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(self.type_name) };
-        cstr.to_string_lossy().into_owned()
+        if self.type_name.is_null() {
+            std::string::String::new()
+        } else {
+            unsafe { CStr::from_ptr(self.type_name).to_string_lossy().to_string() }
+        }
     }
 }
 
@@ -865,7 +880,10 @@ pub struct RTTIEnumBitSet {
 
 impl NamedRTTI for RTTIEnumBitSet {
     fn name(&self) -> std::string::String {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(self.type_name) };
-        cstr.to_string_lossy().into_owned()
+        if self.type_name.is_null() {
+            std::string::String::new()
+        } else {
+            unsafe { CStr::from_ptr(self.type_name).to_string_lossy().to_string() }
+        }
     }
 }

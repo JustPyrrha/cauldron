@@ -3,6 +3,7 @@ use windows::Win32::Graphics::Direct3D12::ID3D12Device;
 
 gen_with_vtbl!(
     NxD3D12Driver,
+    NxD3D12DriverVtbl,
 
     fn fn_destructor();
 

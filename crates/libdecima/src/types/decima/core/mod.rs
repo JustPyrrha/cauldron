@@ -3,6 +3,8 @@ pub mod camera_entity;
 pub mod entity;
 pub mod entity_component;
 pub mod enums;
+pub mod exported_symbols;
+pub mod factory_manager;
 pub mod g_core;
 pub mod mover;
 pub mod player;

@@ -31,6 +31,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,13 +532,12 @@ checksum = "afbdc74edc00b6f6a218ca6a5364d6226a259d4b8ea1af4a0ea063f27e179f4d"
 name = "pulse"
 version = "0.1.0-alpha"
 dependencies = [
+ "anyhow",
  "cauldron",
  "json-writer",
- "libc",
  "libdecima",
  "minhook",
  "once_cell",
- "windows",
 ]
 
 [[package]]
@@ -759,16 +764,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
 
 [[package]]
-name = "version-shim"
-version = "0.1.0-alpha"
-dependencies = [
- "libc",
- "once_cell",
- "paste",
- "windows-sys",
-]
-
-[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -956,6 +951,16 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "winhttp-shim"
+version = "0.1.0-alpha"
+dependencies = [
+ "libc",
+ "once_cell",
+ "paste",
+ "windows-sys",
+]
 
 [[package]]
 name = "winnow"

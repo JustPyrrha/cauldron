@@ -6,6 +6,7 @@ use windows::Win32::Graphics::Dxgi::{IDXGIFactory1, IDXGISwapChain3};
 
 gen_with_vtbl!(
     NxDXGIImpl,
+    NxDXGIImplVtbl,
 
     fn fn_destructor();
     fn fn_initialize();
