@@ -119,6 +119,10 @@ impl Offset {
         result
     }
 
+    pub fn as_nadjusted(&self, offset: usize) -> Offset {
+        Offset(self.0.sub(offset))
+    }
+
     pub fn as_relative(&self, instruction_length: usize) -> Offset {
         let rel_adjust = unsafe {
             std::mem::transmute::<usize, *mut u32>(

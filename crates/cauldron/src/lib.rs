@@ -16,7 +16,6 @@ use crate::util::message_box;
 use crate::version::{CauldronGameType, GameVersion};
 // use focus::egui_d3d12::pipeline::Pipeline;
 use libdecima::log;
-use libdecima::mem::offsets::Offsets;
 use libdecima::mem::patch_reporting_loggers;
 use libdecima::types::nixxes::log::NxLogImpl;
 use minhook::{MH_ApplyQueued, MH_EnableHook, MH_Initialize, MH_STATUS, MhHook};
@@ -448,6 +447,7 @@ static mut INSTANCE: OnceCell<CauldronLoader> = OnceCell::new();
 static NIXXES_PRINTLN: OnceCell<unsafe extern "C" fn(*mut NxLogImpl, *const c_char)> =
     OnceCell::new();
 
+#[doc(hidden)]
 #[cfg(feature = "nixxes")]
 unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
     unsafe {
@@ -470,89 +470,97 @@ unsafe fn nxlogimpl_println_impl(this: *mut NxLogImpl, text: *const c_char) {
 #[doc(hidden)]
 pub unsafe fn handle_dll_attach() {
     unsafe {
-        patch_reporting_loggers();
+        std::thread::spawn(|| {
+            patch_reporting_loggers();
 
-        let config = load_config();
-        let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
-        if config.logging.show_console {
-            AllocConsole();
-            AttachConsole(ATTACH_PARENT_PROCESS);
+            #[cfg(feature = "nixxes")]
+            {
+                let log =
+                    NxLogImpl::__vftable(NxLogImpl::get_instance().unwrap() as *const _ as *mut _);
 
-            loggers.push(simplelog::TermLogger::new(
-                config.logging.console_level.to_log(),
-                Config::default(),
-                TerminalMode::Mixed,
-                ColorChoice::Auto,
-            ))
-        }
-        loggers.push(simplelog::WriteLogger::new(
-            config.logging.file_level.to_log(),
-            Config::default(),
-            File::create(config.logging.file_path).unwrap(),
-        ));
-        simplelog::CombinedLogger::init(loggers).unwrap();
+                match MH_Initialize() {
+                    MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
+                    status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => {
+                        panic!("MH_Initialize: {status:?}")
+                    }
+                    _ => unreachable!(),
+                }
 
-        #[cfg(feature = "nixxes")]
-        {
-            Offsets::setup();
-            let log = NxLogImpl::get_instance().unwrap();
-            let log = NxLogImpl::__vftable(log as *const _ as *mut _);
+                let nxlogimpl_println =
+                    MhHook::new(log.fn_println as *mut _, nxlogimpl_println_impl as *mut _)
+                        .unwrap();
 
-            match MH_Initialize() {
-                MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {}
-                status @ MH_STATUS::MH_ERROR_MEMORY_ALLOC => panic!("MH_Initialize: {status:?}"),
-                _ => unreachable!(),
+                NIXXES_PRINTLN
+                    .set(std::mem::transmute(nxlogimpl_println.trampoline()))
+                    .unwrap();
+
+                // enable all
+                MH_EnableHook(std::ptr::null_mut())
+                    .ok()
+                    .expect("cauldron: failed to queue enable hooks");
+                MH_ApplyQueued()
+                    .ok()
+                    .expect("cauldron: failed to apply queued hooks");
             }
+            let config = load_config();
+            let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
+            if config.logging.show_console {
+                AllocConsole();
+                AttachConsole(ATTACH_PARENT_PROCESS);
 
-            let nxlogimpl_println =
-                MhHook::new(log.fn_println as *mut _, nxlogimpl_println_impl as *mut _).unwrap();
+                loggers.push(simplelog::TermLogger::new(
+                    config.logging.console_level.to_log(),
+                    Config::default(),
+                    TerminalMode::Mixed,
+                    ColorChoice::Auto,
+                ))
+            }
+            loggers.push(simplelog::WriteLogger::new(
+                config.logging.file_level.to_log(),
+                Config::default(),
+                File::create(config.logging.file_path).unwrap(),
+            ));
+            simplelog::CombinedLogger::init(loggers).unwrap();
+            let Some(game_type) = CauldronGameType::find_from_exe() else {
+                log!(
+                    "Cauldron",
+                    "Unknown game type \"{}\", exiting.",
+                    current_exe()
+                        .unwrap()
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                );
+                message_box(
+                    "Game Unknown",
+                    "Cauldron as detected an unknown game type and will now exit.",
+                    MB_OK | MB_ICONERROR,
+                );
+                std::process::exit(0);
+            };
 
-            NIXXES_PRINTLN
-                .set(std::mem::transmute(nxlogimpl_println.trampoline()))
-                .unwrap();
-
-            // enable all
-            MH_EnableHook(std::ptr::null_mut())
-                .ok()
-                .expect("cauldron: failed to queue enable hooks");
-            MH_ApplyQueued()
-                .ok()
-                .expect("cauldron: failed to apply queued hooks");
-
-            focus::internal::attach();
-        }
-
-        log!("Cauldron", "Starting v{}...", env!("CARGO_PKG_VERSION"));
-
-        if CauldronGameType::find_from_exe().is_none() {
             log!(
                 "Cauldron",
-                "Unknown game type \"{}\", exiting.",
-                current_exe()
-                    .unwrap()
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
+                "Starting v{} for {game_type} ({})...",
+                env!("CARGO_PKG_VERSION"),
+                game_type.id()
             );
-            message_box(
-                "Game Unknown",
-                "Cauldron as detected an unknown game type and will now exit.",
-                MB_OK | MB_ICONERROR,
-            );
-            std::process::exit(0);
-        }
 
-        #[allow(static_mut_refs)]
-        INSTANCE.get_or_init(|| {
-            let mut instance = CauldronLoader::new();
-            let paths = instance.try_find_plugins();
-            for path in paths {
-                instance.try_load_plugin(&path);
-            }
-            instance.do_plugin_init();
+            #[cfg(feature = "nixxes")]
+            focus::internal::attach();
 
-            instance
+            #[allow(static_mut_refs)]
+            INSTANCE.get_or_init(|| {
+                let mut instance = CauldronLoader::new();
+                let paths = instance.try_find_plugins();
+                for path in paths {
+                    instance.try_load_plugin(&path);
+                }
+                instance.do_plugin_init();
+
+                instance
+            });
         });
     }
 }

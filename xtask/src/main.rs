@@ -44,15 +44,19 @@ fn hfw_task() -> Result<(), DynError> {
     let pulse_dir = plugins_dir.join("pulse");
     let debug_out = project_root().join("target/x86_64-pc-windows-msvc/debug/");
 
-    let root_outputs = vec![debug_out.join("version.dll"), debug_out.join("version.pdb")];
+    let root_outputs = vec![
+        debug_out.join("winhttp.dll"), /*debug_out.join("winhttp.pdb")*/
+    ];
     let core_outputs = vec![
         debug_out.join("cauldron.dll"),
-        debug_out.join("cauldron.pdb"),
+        // debug_out.join("cauldron.pdb"),
     ];
-    let _pulse_outputs = vec![debug_out.join("pulse.dll"), debug_out.join("pulse.pdb")];
+    let pulse_outputs = vec![
+        debug_out.join("pulse.dll"), /*debug_out.join("pulse.pdb")*/
+    ];
     let plugin_outputs = vec![
         debug_out.join("legacy.dll"),
-        debug_out.join("legacy.pdb"),
+        // debug_out.join("legacy.pdb"),
         // debug_out.join("hello_cauldron.dll"),
         // debug_out.join("hello_cauldron.pdb"),
     ];
@@ -67,9 +71,9 @@ fn hfw_task() -> Result<(), DynError> {
     core_outputs.iter().for_each(|path| {
         fs::copy(path, cauldron_dir.join(path.file_name().unwrap())).unwrap();
     });
-    // pulse_outputs.iter().for_each(|path| {
-    //     fs::copy(path, pulse_dir.join(path.file_name().unwrap())).unwrap();
-    // });
+    pulse_outputs.iter().for_each(|path| {
+        fs::copy(path, pulse_dir.join(path.file_name().unwrap())).unwrap();
+    });
     plugin_outputs.iter().for_each(|path| {
         fs::copy(path, plugins_dir.join(path.file_name().unwrap())).unwrap();
     });

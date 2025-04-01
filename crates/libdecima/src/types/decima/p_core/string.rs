@@ -2,7 +2,7 @@ use crate::assert_size;
 use crate::mem::offsets::Offset;
 use std::ffi::c_char;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct StringData {
     pub ref_count: u32,
@@ -15,7 +15,7 @@ impl StringData {
     pub const INVALID_CRC: u32 = 0xFFFFFFFF;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct String {
     pub data: *const c_char,

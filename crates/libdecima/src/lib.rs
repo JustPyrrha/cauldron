@@ -8,6 +8,7 @@ compile_error!("At least one target feature must be enabled.");
 
 pub mod mem;
 pub mod types;
+pub mod util;
 
 pub mod macros {
     #[macro_export]
@@ -103,12 +104,15 @@ pub mod log {
     use crate::types::nixxes::log::NxLogImpl;
 
     pub fn log_impl(category: &str, text: &str) {
-        let log = NxLogImpl::get_instance().unwrap();
-        NxLogImpl::fn_log(
-            log as *const _ as *mut _,
-            format!("{}\0", category).as_str().as_ptr() as *const _,
-            format!("{}\0", text).as_str().as_ptr() as *const _,
-        )
+        if let Some(log) = NxLogImpl::get_instance() {
+            NxLogImpl::fn_log(
+                log as *const _ as *mut _,
+                format!("{}\0", category).as_str().as_ptr() as *const _,
+                format!("{}\0", text).as_str().as_ptr() as *const _,
+            )
+        } else {
+            println!("[{category}] {text}");
+        }
     }
 
     #[macro_export]

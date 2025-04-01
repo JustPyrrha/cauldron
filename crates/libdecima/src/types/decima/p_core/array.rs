@@ -3,8 +3,8 @@ use std::slice;
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Array<T> {
-    pub count: i32,
-    pub capacity: i32,
+    pub count: u32,
+    pub capacity: u32,
     pub data: *mut T,
 }
 

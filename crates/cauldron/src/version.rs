@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::env::current_exe;
+use std::fmt::{Display, Formatter};
 use std::ptr;
 use windows::Win32::Storage::FileSystem::{
     GetFileVersionInfoSizeW, GetFileVersionInfoW, VS_FIXEDFILEINFO, VerQueryValueW,
@@ -36,6 +37,18 @@ impl CauldronGameType {
             "hzd" => Some(CauldronGameType::HorizonZeroDawn),
             "hzdr" => Some(CauldronGameType::HorizonZeroDawnRemastered),
             _ => None,
+        }
+    }
+}
+
+impl Display for CauldronGameType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CauldronGameType::HorizonForbiddenWest => f.write_str("Horizon: Forbidden West"),
+            CauldronGameType::HorizonZeroDawn => f.write_str("Horizon: Zero Dawn"),
+            CauldronGameType::HorizonZeroDawnRemastered => {
+                f.write_str("Horizon: Zero Dawn Remastered")
+            }
         }
     }
 }

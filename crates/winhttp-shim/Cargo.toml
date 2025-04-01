@@ -1,0 +1,19 @@
+[package]
+name = "winhttp-shim"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "A lightweight shim for winhttp.dll"
+
+[lib]
+name = "winhttp"
+crate-type = [ "cdylib" ]
+
+[dependencies]
+libc.workspace = true
+once_cell.workspace = true
+paste.workspace = true
+
+[dependencies.windows-sys]
+workspace = true
+features = ["Win32_Foundation", "Win32_System_SystemServices", "Win32_Storage_FileSystem", "Win32_System_LibraryLoader", "Win32_Networking_WinHttp"]

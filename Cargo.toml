@@ -9,7 +9,7 @@ members = [
     "crates/libdecima",
     "crates/minhook",
     "crates/pulse",
-    "crates/version-shim",
+    "crates/winhttp-shim",
     "xtask",
 ]
 
@@ -25,6 +25,7 @@ focus = { version = "0.1.0-alpha", path = "crates/focus" }
 libdecima = { version = "0.1.0-alpha", path = "crates/libdecima" }
 minhook = { version = "1.0.0", path = "crates/minhook" }
 
+anyhow = "1.0.97"
 bitflags = "2.9.0"
 cc = "1.2.3"
 glam = { version = "0.30.0", features = ["mint"] }
